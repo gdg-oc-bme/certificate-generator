@@ -3,7 +3,7 @@ This program is used to help automate the tedious process of manually editing an
 
 # Rules for contributing
 1. Provide **informative** names for your commits/branches/PRs.
-2. Always create a **branch** from main when starting to work on a new issue! It is an important step because we do not want anyone to commit directly to main, and this is how it is done in the entreprise too.
+2. Always create a **branch** from main when starting to work on a new issue! It is an important step because we do not want anyone to commit directly to main, and this is how it is done in the enterprise too.
 3. Do NOT merge until you get at least **2 approvals**! We are working on enforcing this rule.
 4. If possible, write a **unit test** for your piece of functionality. This is necessary to ensure that later changes will not break the original functionality.
 
@@ -13,6 +13,7 @@ This program is used to help automate the tedious process of manually editing an
 git clone https://github.com/gdsc-bme/certificate-generator.git
 ```
 The SSH setup is recommended as it is more secure and the companies mostly use it as well.
+
 2. Create a new branch, preferrably give it a name related to the issue you are working on. 
 ```
 git branch example-branch
