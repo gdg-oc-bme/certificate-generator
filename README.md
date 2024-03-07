@@ -1,5 +1,41 @@
 # Certificate Generator
 This program is used to help automate the tedious process of manually editing and uploading certificates to GDSC event participants or core team members.
+
+# Rules for contributing
+1. Provide **informative** names for your commits/branches/PRs.
+2. Always create a **branch** from main when starting to work on a new issue! It is an important step because we do not want anyone to commit directly to main, and this is how it is done in the entreprise too.
+3. Do NOT merge until you get at least **2 approvals**! We are working on enforcing this rule.
+4. If possible, write a **unit test** for your piece of functionality. This is necessary to ensure that later changes will not break the original functionality.
+
+# Git 101
+1. Clone the repository to your machine. On the main page under the "Code" button you can find the options:
+```
+git clone https://github.com/gdsc-bme/certificate-generator.git
+```
+The SSH setup is recommended as it is more secure and the companies mostly use it as well.
+2. Create a new branch, preferrably give it a name related to the issue you are working on. 
+```
+git branch example-branch
+git checkout example-branch
+```
+3. When done, add your files for staging
+```
+git add .
+```
+4. Commit your changes
+```
+git commit -m "Your very informative commit message"
+```
+5. Push
+```
+git push origin -u example-branch
+```
+For all your next changes you can simply call ```git push```.
+
+6. Open a pull request on the GitHub UI. Edit the description to reference the issue you are working on. Wait for reviews from others.
+
+7. As soon as your PR is approved, it can be merged.
+
 # Installing Packages
 The requirements.txt file contains the packages deemed to be necessary at the time of writing. However, this is subject to change.
 ```
