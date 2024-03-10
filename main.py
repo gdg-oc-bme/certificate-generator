@@ -1,10 +1,20 @@
+import os
+import pickle
 import pandas as pd
 import cv2
 from google.oauth2 import credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.http import MediaFileUpload
+
 # Importing necessary libraries for JPG/PDF editing and Google Drive API, may or may not import ReportLab to manage PDFs.
 
-# This function will take a .csv file (downloaded from the community page), filter out names with special characters and people who were not checked in, and return the rest of names as a list.
+SCOPES = ['https://www.googleapis.com/auth/drive']
+CLIENT_SECRETS = 'assets/key/client_secret.json'
+TOKEN_PICKLE = 'token.pickle'
+
+#This function will take a .csv file (downloaded from the community page), filter out names with special characters and people who were not checked in, and return the rest of names as a list.
 def read_names_from_file(filename):
     df = pd.read_csv(filename)
     df = df[df['Checkin Date (UTC)'].notna()]
@@ -31,12 +41,115 @@ def edit_certificate(template_path, attendees_list):
         print('Processing Certificate {}/{}'.format(index+1, len(attendees_list)))
     return list_of_jpgs_paths
 
-""" Sample functions only.
-def authenticate_google_drive(): 
-    # Authenticate and return Google Drive service instance
-    pass
+# This function handles the authentication process with Google Drive. To prevent requesting consent constantly, the credentials are stored as a pickle
+def Authenticate():
+    try:
+        if os.path.exists(TOKEN_PICKLE):
+            with open(TOKEN_PICKLE, 'rb') as token:
+                credentials = pickle.load(token)
+        else:  
+            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS, SCOPES)
+            credentials = flow.run_local_server()
+            with open(TOKEN_PICKLE, 'wb') as token:
+                pickle.dump(credentials, token)
+    
+        service = build('drive', 'v3', credentials=credentials)
+        print('Authentication successful!')
+        return service
+    
+    except HttpError as error:
+        print(f'An error occured: {error}')
+        return None
+    
+# This function creates a folder in google drive. The name of the folder can be specified. It checks for duplicate folders 
+# It checks if a folder with the specified name already exists in the parent folder (if provided). If not, it creates a new folder and returns its ID. 
+def CreateFolder(service, folder_name, parent_id=None):
+    try:
+        query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'"
+        if parent_id:
+            query += f" and '{parent_id}' in parents"
+        
+        results = service.files().list(q=query, fields='files(id)').execute()
+        folders = results.get('files', [])
+    
+        if folders:
+            print('Folder already exists.')
+            return folders[0]['id']
+        else:        
+            folder_metadata = {
+                'name': folder_name,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            if parent_id:
+                folder_metadata['parents'] = [parent_id]
 
-def upload_to_google_drive(pdf_paths, drive_service):
-    # Upload PDFs to Google Drive
-    pass
-"""
+            folder = service.files().create(body=folder_metadata, fields='id').execute()
+            print('Folder created successfully')
+            folder_id = folder.get('id')
+        # Set permissions
+        permission = {
+            'type': 'anyone',
+            'role': 'reader'
+        }   
+        service.permissions().create(fileId=folder_id, body=permission).execute()
+        print('Folder permission set successfully')
+        return folder_id
+        
+    except HttpError as error:
+        print(f'An error occured: {error}')
+        return None
+    
+# This function uploads the files to a specified folder in google drive.  It checks if the parent folder exists and creates it if necessary using the CreateFolder function.
+# It avoids uploading duplicate files
+# Use case example: Upload("path/to/folder or file", "Name of drive folder to upload to")
+def Upload(file_path, parent_folder_name):
+    service = Authenticate()
+    try:
+        parent_folder_id = CreateFolder(service, parent_folder_name)
+    
+        if os.path.isdir(file_path):
+            for root, dirs, files in os.walk(file_path):
+                for file in files:
+                    file_metadata = {
+                        'name' : file,
+                        'parents' : [parent_folder_id]
+                    }
+                    query = f"name='{file}' and '{parent_folder_id}' in parents"
+                    results = service.files().list(q=query, fields='files(id)').execute()
+                    existing_files = results.get('files', [])
+                
+                    if existing_files:
+                        print(f"File '{file}' already exists in the folder. Skipping upload.")
+                    else:
+                        file_path = os.path.join(root, file)
+                        media = MediaFileUpload(file_path, resumable=True)
+                        file = service.files().create(
+                            body=file_metadata,
+                            media_body=media
+                        ).execute()
+                        print(f"Uploaded {file['name']}")
+            #Uncomment to delete local file
+            #os.remove(file_path)
+        else:
+            file_metadata = {
+                'name' : os.path.basename(file_path),
+                'parents' : [parent_folder_id]
+            }
+            query = f"name='{os.path.basename(file_path)}' and '{parent_folder_id}' in parents"
+            results = service.files().list(q=query, fields='files(id)').execute()
+            existing_files = results.get('files', [])
+        
+            if existing_files:
+                print(f"File '{os.path.basename(file_path)}' already exists in the folder. Skipping upload.")
+            else:
+                media = MediaFileUpload(file_path, resumable=True)
+                file = service.files().create(
+                    body=file_metadata,
+                    media_body=media
+                ).execute()
+                print(f"Uploaded {file['name']}")
+            #Uncomment to remove local file
+            #os.remove(file_path)
+    except HttpError as error:
+        print(f'An error occured: {error}')
+        return None
