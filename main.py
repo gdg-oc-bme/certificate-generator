@@ -2,17 +2,19 @@ import os
 import pickle
 import pandas as pd
 import cv2
+import json
 from google.oauth2 import credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaFileUpload
 
 # Importing necessary libraries for JPG/PDF editing and Google Drive API, may or may not import ReportLab to manage PDFs.
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
-CLIENT_SECRETS = 'assets/key/client_secret.json'
-TOKEN_PICKLE = 'token.pickle'
+CLIENT_SECRETS = ''
+CREDENTIALS_JSON = 'credentials.json'
 
 #This function will take a .csv file (downloaded from the community page), filter out names with special characters and people who were not checked in, and return the rest of names as a list.
 def read_names_from_file(filename):
@@ -42,16 +44,18 @@ def edit_certificate(template_path, attendees_list):
     return list_of_jpgs_paths
 
 # This function handles the authentication process with Google Drive. To prevent requesting consent constantly, the credentials are stored as a pickle
-def Authenticate():
+def Authenticate():  
     try:
-        if os.path.exists(TOKEN_PICKLE):
-            with open(TOKEN_PICKLE, 'rb') as token:
-                credentials = pickle.load(token)
+        if os.path.exists(CREDENTIALS_JSON):
+            with open(CREDENTIALS_JSON, 'r') as file:
+                credentials_json = json.load(file)
+                credentials = Credentials.from_authorized_user_info(credentials_json, scopes=SCOPES)
         else:  
             flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS, SCOPES)
             credentials = flow.run_local_server()
-            with open(TOKEN_PICKLE, 'wb') as token:
-                pickle.dump(credentials, token)
+            credentials_json = credentials.to_json()
+            with open(CREDENTIALS_JSON, 'w') as file:
+                file.write(credentials_json)
     
         service = build('drive', 'v3', credentials=credentials)
         print('Authentication successful!')
@@ -60,11 +64,33 @@ def Authenticate():
     except HttpError as error:
         print(f'An error occured: {error}')
         return None
+
+# This function checks if the user has the required permissions to upload files to Google Drive. If not, it raises an exception
+def CheckPermissions(service, required_permissions):
+    try:
+        # Fetch current user's permissions
+        permissions = service.permissions().list(fileId='root').execute()
+        
+        # Check if user has required permissions
+        for permission in permissions.get('permissions', []):
+            role = permission.get('role')
+            if role in required_permissions:
+                return True
+        
+        return False
     
+    except HttpError as error:
+        print(f'An error occurred: {error}')
+        return False
+  
 # This function creates a folder in google drive. The name of the folder can be specified. It checks for duplicate folders 
 # It checks if a folder with the specified name already exists in the parent folder (if provided). If not, it creates a new folder and returns its ID. 
 def CreateFolder(service, folder_name, parent_id=None):
     try:
+        # Check permissions to create folder
+        if not CheckPermissions(service, ['owner', 'writer']):
+            raise Exception("Insufficient permissions.")
+        
         query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'"
         if parent_id:
             query += f" and '{parent_id}' in parents"
@@ -105,6 +131,10 @@ def CreateFolder(service, folder_name, parent_id=None):
 def Upload(file_path, parent_folder_name):
     service = Authenticate()
     try:
+        # Check for permission to upload files
+        if not CheckPermissions(service, ['owner', 'writer']):
+            raise Exception("Insufficient permissions.")
+        
         parent_folder_id = CreateFolder(service, parent_folder_name)
     
         if os.path.isdir(file_path):
