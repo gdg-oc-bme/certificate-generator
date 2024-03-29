@@ -34,9 +34,10 @@ def read_names_from_file(filename):
 
 
 def generate_certificates(filepath, event_title_entry, event_date_entry):
+    attendees_list = [] # initialize attendees_list to an empty list
     if filepath:
         attendees_list = read_names_from_file(filepath)
-    ce.edit_certificate("template_certificate_line.jpg", attendees_list, event_title_entry.get(), event_date_entry.get(), ce.font_path)
+    ce.edit_certificate("template_certificate_no_line.jpg", attendees_list, event_title_entry.get(), event_date_entry.get(), ce.name_font_path, ce.regular_font_path)
     print("Generating certificates with the provided details...")
 
 
@@ -71,10 +72,13 @@ def setup_gui():
     event_date_entry.grid(row=2, column=1, padx=10, pady=5)
 
     def generate_certificates_button():
+        if not filepath.get():
+            messagebox.showerror("No CSV file selected", "Please select a CSV file before generating certificates")
+            return
         if not validate_date(event_date_entry.get()):
             messagebox.showerror("Invalid date", "Please enter a valid date in the format DD/MM/YYYY")
             return
-    generate_certificates(filepath.get(), event_title_entry, event_date_entry)
+        generate_certificates(filepath.get(), event_title_entry, event_date_entry)
 
     generate_button = tk.Button(root, text="Generate Certificates", command=generate_certificates_button)
     generate_button.config(width=20, height = 2, font =('Helvetica', 12))
