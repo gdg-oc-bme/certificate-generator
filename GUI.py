@@ -37,8 +37,8 @@ def generate_certificates(filepath, event_title_entry, event_date_entry):
     attendees_list = [] # initialize attendees_list to an empty list
     if filepath:
         attendees_list = read_names_from_file(filepath)
-    ce.edit_certificate("template_certificate_no_line.jpg", attendees_list, event_title_entry.get(), event_date_entry.get(), ce.name_font_path, ce.regular_font_path)
-    print("Generating certificates with the provided details...")
+    ce.edit_certificate("template_certificate_line.jpg", attendees_list, event_title_entry.get(), event_date_entry.get(), ce.name_font_path, ce.regular_font_path)
+    print("The certificates have been generated successfully!")
 
 
 def setup_gui():
