@@ -1,7 +1,10 @@
 from google.oauth2 import credentials
 from googleapiclient.discovery import build
-from certificateEditor import edit_certificate
 import GUI
+import driveUpload
+
 # Entrypoint for the application
 if __name__ == "__main__":
     GUI.setup_gui()
+# Use case example: Upload("path/to/folder or file", "Name of drive folder to upload to")
+    driveUpload.Upload("Certificates_GDSC_BME.pdf", "Certificates")
