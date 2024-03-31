@@ -6,5 +6,3 @@ import driveUpload
 # Entrypoint for the application
 if __name__ == "__main__":
     GUI.setup_gui()
-# Use case example: Upload("path/to/folder or file", "Name of drive folder to upload to")
-    driveUpload.Upload("Certificates_GDSC_BME.pdf", "Certificates")

@@ -103,18 +103,21 @@ def Upload(file_path, parent_folder_name):
             raise Exception("Insufficient permissions.")
         
         parent_folder_id = CreateFolder(service, parent_folder_name)
-    
+                                    
         if os.path.isdir(file_path):
             for root, dirs, files in os.walk(file_path):
                 for file in files:
+                    encoded_file_name = file.replace("'", "\\'")
+                    
                     file_metadata = {
                         'name' : file,
                         'parents' : [parent_folder_id]
                     }
-                    query = f"name='{file}' and '{parent_folder_id}' in parents"
+                    query = f"name='{encoded_file_name}' and '{parent_folder_id}' in parents"
                     results = service.files().list(q=query, fields='files(id)').execute()
-                    existing_files = results.get('files', [])
-                
+                    
+                    existing_files = results.get('files', [])       
+                    
                     if existing_files:
                         print(f"File '{file}' already exists in the folder. Skipping upload.")
                     else:
@@ -128,11 +131,13 @@ def Upload(file_path, parent_folder_name):
             #Uncomment to delete local file
             #os.remove(file_path)
         else:
+            encoded_file_name = os.path.basename(file_path).replace("'", "\\'")
+            
             file_metadata = {
                 'name' : os.path.basename(file_path),
                 'parents' : [parent_folder_id]
             }
-            query = f"name='{os.path.basename(file_path)}' and '{parent_folder_id}' in parents"
+            query = f"name='{encoded_file_name}' and '{parent_folder_id}' in parents"
             results = service.files().list(q=query, fields='files(id)').execute()
             existing_files = results.get('files', [])
         
@@ -147,6 +152,8 @@ def Upload(file_path, parent_folder_name):
                 print(f"Uploaded {file['name']}")
             #Uncomment to remove local file
             #os.remove(file_path)
+        
+        print('Process completed successfully!')
     except HttpError as error:
         print(f'An error occured: {error}')
         return None
