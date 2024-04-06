@@ -1,10 +1,11 @@
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
+import os
 
 name_font_path = "Open_Sans\static\OpenSans-Bold.ttf"
 regular_font_path = "Open_Sans\static\OpenSans-Regular.ttf"
 # This function will take parameters from the user input via the GUI, and its output will be .jpg certificates corresponding to each name in the .csv
-def edit_certificate(template_path, attendees_list, eventTitle, eventDate, name_font_path, regular_font_path):
+def edit_certificate(template_path, attendees_list, eventTitle, eventDate, name_font_path, regular_font_path, save_dir):
     list_of_jpgs_paths = []
     for index, name in enumerate(attendees_list):
         template = Image.open(template_path)
@@ -35,8 +36,8 @@ def edit_certificate(template_path, attendees_list, eventTitle, eventDate, name_
         draw.text((eventTitle_startX, eventTitle_startY), eventTitle, (0, 0, 0), font=eventTitle_font)
         draw.text((eventDate_startX, eventDate_startY), eventDate, (0, 0, 0), font=eventDate_font)
         draw.text((startX, startY), name, (0, 0, 0), font=font)
-
-        output_path = rf'GeneratedCertificates\{name}.jpg'
+            
+        output_path = rf'{save_dir}\{name}.jpg'
         template.save(output_path)
         list_of_jpgs_paths.append(output_path)
         print(f'Processing Certificate {index+1}/{len(attendees_list)}')

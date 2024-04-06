@@ -1,8 +1,10 @@
+import os
 import pandas as pd
 import tkinter as tk
 from tkinter import simpledialog, filedialog, messagebox
 from datetime import datetime
 import certificateEditor as ce
+from driveUpload import Upload
 
 def validate_date(date_text):
     try:
@@ -22,6 +24,16 @@ def select_csv_file():
     else:
         return None  # Return None if no file was selected
 
+def select_upload_path():
+    filepath = filedialog.askdirectory(
+        title="Select a folder to upload the certificates"
+        )
+    if filepath:  # Check if a folder was selected
+        print(f"You selected: {filepath}")
+        return filepath  # Return the selected folder path
+    else:
+        return None  # Return None if no folder was selected
+
 # This function will take a .csv file (downloaded from the community page), filter out names with special characters and people who were not checked in, and return the rest of names as a list.
 def read_names_from_file(filename):
     df = pd.read_csv(filename)
@@ -35,19 +47,33 @@ def read_names_from_file(filename):
 
 def generate_certificates(filepath, event_title_entry, event_date_entry):
     attendees_list = [] # initialize attendees_list to an empty list
+    save_dir = certificates_save_dir()
     if filepath:
         attendees_list = read_names_from_file(filepath)
-    ce.edit_certificate("template_certificate_line.jpg", attendees_list, event_title_entry.get(), event_date_entry.get(), ce.name_font_path, ce.regular_font_path)
+    ce.edit_certificate("template_certificate_line.jpg", attendees_list, event_title_entry.get(), event_date_entry.get(), ce.name_font_path, ce.regular_font_path, save_dir)
     print("The certificates have been generated successfully!")
 
-
+def certificates_save_dir():
+    save_directory = filedialog.askdirectory(title="Select Directory to Save Certificates")
+    if save_directory:
+        print(f"You selected: {save_directory}")
+        return save_directory
+    else:
+        return None
+    
+def upload_to_drive():
+    folder_path = select_upload_path()
+    if folder_path:
+        parent_folder_name = os.path.basename(folder_path)
+        Upload(folder_path, parent_folder_name)
+        
 def setup_gui():
     root = tk.Tk()
     root.title("GDSCBME Certificate Generator")
     logo_image = tk.PhotoImage(file="logo.png").subsample(3,3)
     logo_label = tk.Label(root, image=logo_image, bg="navy")
     logo_label.grid(row=9, column=1, columnspan=2, sticky = 'es', padx=10, pady=30)
-    root.geometry("600x350")
+    root.geometry("550x550")
     root.configure(bg='navy')
 
     filepath = tk.StringVar()
@@ -70,6 +96,10 @@ def setup_gui():
     event_title_entry.grid(row=1, column=1, padx=10, pady=5)
     event_date_label.grid(row=2, column=0, padx=10, pady=5, sticky='w')
     event_date_entry.grid(row=2, column=1, padx=10, pady=5)
+            
+    upload_button = tk.Button(root, text="Upload to Drive", command=upload_to_drive)
+    upload_button.config(width=20, height = 2, font =('Helvetica', 12))
+    upload_button.grid(row=4, column=0, columnspan=2, sticky='ew', padx=10, pady=10)
 
     def generate_certificates_button():
         if not filepath.get():
