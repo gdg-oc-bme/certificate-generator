@@ -7,9 +7,8 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaFileUpload
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
-CLIENT_SECRETS = ''
 CREDENTIALS_JSON = 'credentials.json'
-
+CLIENT_SECRETS = 'client_secret.json' # Make sure you have this file in the same directory as the script
 # This function handles the authentication process with Google Drive. To prevent requesting consent constantly, the credentials are stored as a pickle
 def Authenticate():  
     try:

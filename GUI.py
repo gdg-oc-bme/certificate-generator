@@ -50,7 +50,7 @@ def generate_certificates(filepath, event_title_entry, event_date_entry):
     save_dir = certificates_save_dir()
     if filepath:
         attendees_list = read_names_from_file(filepath)
-    ce.edit_certificate("template_certificate_line.jpg", attendees_list, event_title_entry.get(), event_date_entry.get(), ce.name_font_path, ce.regular_font_path, save_dir)
+    ce.edit_certificate("template_certificate_no_line.jpg", attendees_list, event_title_entry.get(), event_date_entry.get(), ce.name_font_path, ce.regular_font_path, save_dir)
     print("The certificates have been generated successfully!")
 
 def certificates_save_dir():
