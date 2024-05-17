@@ -1,9 +1,9 @@
 from PIL import Image, ImageDraw, ImageFont
-import numpy as np
-import os
+import utils
 
-name_font_path = "Open_Sans\static\OpenSans-Bold.ttf"
-regular_font_path = "Open_Sans\static\OpenSans-Regular.ttf"
+name_font_path = utils.resource_path('Open_Sans/static/OpenSans-Bold.ttf')
+regular_font_path = utils.resource_path('Open_Sans/static/OpenSans-Regular.ttf')
+
 # This function will take parameters from the user input via the GUI, and its output will be .jpg certificates corresponding to each name in the .csv
 def edit_certificate(template_path, attendees_list, eventTitle, eventDate, name_font_path, regular_font_path, save_dir):
     list_of_jpgs_paths = []

@@ -1,10 +1,14 @@
 import os
 import pandas as pd
 import tkinter as tk
-from tkinter import simpledialog, filedialog, messagebox
+from tkinter import filedialog, messagebox
 from datetime import datetime
 import certificateEditor as ce
 from driveUpload import Upload
+import utils
+
+logo_image_path = utils.resource_path('logo.png')
+template_image_path = utils.resource_path('template_certificate_no_line.jpg')
 
 def validate_date(date_text):
     try:
@@ -50,7 +54,7 @@ def generate_certificates(filepath, event_title_entry, event_date_entry):
     save_dir = certificates_save_dir()
     if filepath:
         attendees_list = read_names_from_file(filepath)
-    ce.edit_certificate("template_certificate_no_line.jpg", attendees_list, event_title_entry.get(), event_date_entry.get(), ce.name_font_path, ce.regular_font_path, save_dir)
+    ce.edit_certificate(template_image_path, attendees_list, event_title_entry.get(), event_date_entry.get(), ce.name_font_path, ce.regular_font_path, save_dir)
     print("The certificates have been generated successfully!")
 
 def certificates_save_dir():
@@ -70,7 +74,7 @@ def upload_to_drive():
 def setup_gui():
     root = tk.Tk()
     root.title("GDSCBME Certificate Generator")
-    logo_image = tk.PhotoImage(file="logo.png").subsample(3,3)
+    logo_image = tk.PhotoImage(file=logo_image_path).subsample(3, 3)
     logo_label = tk.Label(root, image=logo_image, bg="navy")
     logo_label.grid(row=9, column=1, columnspan=2, sticky = 'es', padx=10, pady=30)
     root.geometry("550x550")

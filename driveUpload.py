@@ -5,19 +5,29 @@ from googleapiclient.errors import HttpError
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaFileUpload
+from google.auth.transport.requests import Request
+from google.auth.exceptions import RefreshError
+import utils
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
 CREDENTIALS_JSON = 'credentials.json'
-CLIENT_SECRETS = 'client_secret.json' # Make sure you have this file in the same directory as the script
+client_secrets_path = utils.resource_path('client_secret.json') # Make sure you have this file in the same directory as the script
 # This function handles the authentication process with Google Drive. To prevent requesting consent constantly, the credentials are stored as a pickle
-def Authenticate():  
+
+def Authenticate():
     try:
         if os.path.exists(CREDENTIALS_JSON):
             with open(CREDENTIALS_JSON, 'r') as file:
                 credentials_json = json.load(file)
                 credentials = Credentials.from_authorized_user_info(credentials_json, scopes=SCOPES)
-        else:  
-            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS, SCOPES)
+                if credentials.expired:
+                    try:
+                        credentials.refresh(Request())
+                    except RefreshError:
+                        os.remove(CREDENTIALS_JSON)
+                        return Authenticate()  # Trigger re-authentication
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(client_secrets_path, SCOPES)
             credentials = flow.run_local_server()
             credentials_json = credentials.to_json()
             with open(CREDENTIALS_JSON, 'w') as file:
@@ -28,8 +38,10 @@ def Authenticate():
         return service
     
     except HttpError as error:
-        print(f'An error occured: {error}')
+        print(f'An error occurred: {error}')
         return None
+
+
 
 # This function checks if the user has the required permissions to upload files to Google Drive. If not, it raises an exception
 def CheckPermissions(service, required_permissions):
