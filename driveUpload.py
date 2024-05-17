@@ -10,7 +10,7 @@ from google.auth.exceptions import RefreshError
 import utils
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
-CREDENTIALS_JSON = 'credentials.json'
+CREDENTIALS_JSON = 'credentials.json' # If the token in the credentials.json has expired, the credentials.json file must be deleted, and a new one will be created after re-authentication.
 client_secrets_path = utils.resource_path('client_secret.json') # Make sure you have this file in the same directory as the script
 # This function handles the authentication process with Google Drive. To prevent requesting consent constantly, the credentials are stored as a pickle
 
