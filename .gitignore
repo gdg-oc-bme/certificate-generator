@@ -1,5 +1,7 @@
 client_secret.json
 credentials.json
+token.json
+*.pickle
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

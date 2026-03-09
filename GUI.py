@@ -9,6 +9,9 @@ from tkinter import filedialog, messagebox
 import certificateEditor as ce
 from driveUpload import Upload
 
+from tkinter import messagebox
+from driveUpload import Upload, DriveAuthError
+
 BASE_DIR = Path(__file__).resolve().parent
 
 
@@ -89,11 +92,18 @@ def generate_certificates(filepath: str, event_title_entry: tk.Entry, event_date
     print("The certificates have been generated successfully!")
 
 
-def upload_to_drive() -> None:
+def upload_to_drive():
     folder_path = select_upload_path()
     if folder_path:
         parent_folder_name = os.path.basename(folder_path)
-        Upload(folder_path, parent_folder_name)
+        try:
+            folder_url = Upload(folder_path, parent_folder_name)
+            if folder_url:
+                messagebox.showinfo("Upload complete", f"Uploaded to:\n{folder_url}")
+        except DriveAuthError as e:
+            messagebox.showerror("Drive setup required", str(e))
+        except Exception as e:
+            messagebox.showerror("Upload failed", f"Something went wrong:\n{e}")
 
 
 def setup_gui() -> None:
