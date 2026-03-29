@@ -12,6 +12,7 @@ import certificateEditor as ce
 from driveUpload import Upload, DriveAuthError
 
 import sys
+import re
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -95,6 +96,19 @@ def open_file(path: str) -> None:
 def is_name_present(first_name: str, last_name: str) -> bool:
     return bool(str(first_name).strip()) and bool(str(last_name).strip())
 
+def capitalize_initials_only(name: str) -> str:
+    name = " ".join(str(name).strip().split())
+
+    def uppercase_match(match):
+        return match.group(0).upper()
+
+    return re.sub(
+        r"(?:(?<=^)|(?<=[\s'-]))\w",
+        uppercase_match,
+        name,
+        flags=re.UNICODE,
+    )
+
 def find_duplicate_names(names: list[str]) -> list[tuple[str, int]]:
     counts = Counter(names)
     duplicates = [(name, count) for name, count in counts.items() if count > 1]
@@ -161,7 +175,7 @@ def read_names_from_file(
     for index, row in df.iterrows():
         first_name = str(row["First Name"]).strip() if pd.notna(row["First Name"]) else ""
         last_name = str(row["Last Name"]).strip() if pd.notna(row["Last Name"]) else ""
-        full_name = f"{first_name} {last_name}".strip()
+        full_name = capitalize_initials_only(f"{first_name} {last_name}".strip())
 
         if checked_in_only:
             checkin_date = row["Checkin Date (UTC)"]
@@ -311,9 +325,12 @@ def generate_single_certificate(
     progress_bar: ttk.Progressbar,
     root: tk.Tk,
 ) -> None:
-    participant_name = participant_name_entry.get().strip()
+    participant_name = capitalize_initials_only(participant_name_entry.get().strip())
     event_title = event_title_entry.get().strip()
     event_date = event_date_entry.get().strip()
+
+    participant_name_entry.delete(0, tk.END)
+    participant_name_entry.insert(0, participant_name)
 
     if not participant_name:
         messagebox.showerror("Missing participant name", "Please enter the participant name")
@@ -378,9 +395,12 @@ def preview_single_certificate(
     progress_bar: ttk.Progressbar,
     root: tk.Tk,
 ) -> None:
-    participant_name = participant_name_entry.get().strip()
+    participant_name = capitalize_initials_only(participant_name_entry.get().strip())
     event_title = event_title_entry.get().strip()
     event_date = event_date_entry.get().strip()
+
+    participant_name_entry.delete(0, tk.END)
+    participant_name_entry.insert(0, participant_name)
 
     if not participant_name:
         messagebox.showerror("Missing participant name", "Please enter the participant name")

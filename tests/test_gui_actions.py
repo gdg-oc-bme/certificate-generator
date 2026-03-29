@@ -209,6 +209,9 @@ class DummyEntry:
         self.value = ""
         self.deleted = True
 
+    def insert(self, index, value):
+        self.value = value
+
     def focus_set(self):
         self.focused = True
 
