@@ -11,8 +11,12 @@ __pycache__/
 *.so
 venv/
 *.jpg
+!template_certificate_no_line.jpg
+!template_certificate_line.jpg
 *.png
+!logo.png
 *.env
+.vscode/
 # Distribution / packaging
 .Python
 build/
