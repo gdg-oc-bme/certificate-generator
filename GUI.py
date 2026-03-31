@@ -481,7 +481,7 @@ def setup_gui() -> None:
     if logo_image is not None:
         logo_label = tk.Label(root, image=logo_image, bg="navy")
         logo_label.image = logo_image
-        logo_label.grid(row=14, column=1, columnspan=2, sticky="es", padx=10, pady=30)
+        logo_label.grid(row=14, column=0, columnspan=2, padx=10, pady=30)
     else:
         logo_label = tk.Label(
             root,
@@ -490,7 +490,7 @@ def setup_gui() -> None:
             fg="white",
             font=("Helvetica", 12, "bold"),
         )
-        logo_label.grid(row=14, column=0, columnspan=2, sticky="ew", padx=10, pady=30)
+        logo_label.grid(row=14, column=0, columnspan=2, padx=10, pady=30)
 
     filepath = tk.StringVar()
     eligibility_var = tk.StringVar(value="Checked-in only")
