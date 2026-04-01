@@ -16,6 +16,79 @@ import re
 
 BASE_DIR = Path(__file__).resolve().parent
 
+GOOGLE_BLUE = "#4285F4"
+GOOGLE_RED = "#EA4335"
+GOOGLE_YELLOW = "#FBBC05"
+GOOGLE_GREEN = "#34A853"
+BG_COLOR = "#F8F9FA"
+TEXT_COLOR = "#202124"
+WHITE = "#FFFFFF"
+LIGHT_BORDER = "#DADCE0"
+
+class CanvasProgressBar:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        height: int = 22,
+        bg: str = WHITE,
+        border_color: str = LIGHT_BORDER,
+        fill_color: str = GOOGLE_GREEN,
+    ) -> None:
+        self.maximum = 100
+        self.value = 0
+        self.height = height
+        self.fill_color = fill_color
+
+        self.canvas = tk.Canvas(
+            parent,
+            height=height,
+            bg=bg,
+            highlightthickness=1,
+            highlightbackground=border_color,
+            bd=0,
+        )
+        self.fill_id = self.canvas.create_rectangle(
+            0, 0, 0, height,
+            fill=fill_color,
+            outline=fill_color,
+        )
+
+        self.canvas.bind("<Configure>", self._on_resize)
+
+    def _on_resize(self, event=None) -> None:
+        self._redraw()
+
+    def _redraw(self) -> None:
+        self.canvas.update_idletasks()
+        width = self.canvas.winfo_width()
+
+        if self.maximum <= 0:
+            fill_width = 0
+        else:
+            fill_width = (self.value / self.maximum) * width
+
+        self.canvas.coords(self.fill_id, 0, 0, fill_width, self.height)
+
+    def grid(self, *args, **kwargs) -> None:
+        self.canvas.grid(*args, **kwargs)
+
+    def __setitem__(self, key: str, value: float) -> None:
+        if key == "maximum":
+            self.maximum = max(float(value), 1)
+        elif key == "value":
+            self.value = max(0, float(value))
+        else:
+            raise KeyError(f"Unsupported key: {key}")
+
+        self._redraw()
+
+    def __getitem__(self, key: str) -> float:
+        if key == "maximum":
+            return self.maximum
+        if key == "value":
+            return self.value
+        raise KeyError(f"Unsupported key: {key}")
+
 def resource_path(relative_path: str) -> Path:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS) / relative_path
@@ -232,7 +305,7 @@ def generate_certificates(
     event_date_entry: tk.Entry,
     eligibility_var: tk.StringVar,
     progress_var: tk.StringVar,
-    progress_bar: ttk.Progressbar,
+    progress_bar: CanvasProgressBar,
     root: tk.Tk,
 ) -> None:
     event_title = event_title_entry.get().strip()
@@ -322,7 +395,7 @@ def generate_single_certificate(
     event_title_entry: tk.Entry,
     event_date_entry: tk.Entry,
     progress_var: tk.StringVar,
-    progress_bar: ttk.Progressbar,
+    progress_bar: CanvasProgressBar,
     root: tk.Tk,
 ) -> None:
     participant_name = capitalize_initials_only(participant_name_entry.get().strip())
@@ -392,7 +465,7 @@ def preview_single_certificate(
     event_title_entry: tk.Entry,
     event_date_entry: tk.Entry,
     progress_var: tk.StringVar,
-    progress_bar: ttk.Progressbar,
+    progress_bar: CanvasProgressBar,
     root: tk.Tk,
 ) -> None:
     participant_name = capitalize_initials_only(participant_name_entry.get().strip())
@@ -467,8 +540,25 @@ def upload_to_drive() -> None:
 def setup_gui() -> None:
     root = tk.Tk()
     root.title("GDSCBME Certificate Generator")
-    root.geometry("600x720")
-    root.configure(bg="navy")
+    root.geometry("760x760")
+    root.minsize(700, 700)
+    root.configure(bg=BG_COLOR)
+
+    root.columnconfigure(0, weight=0)
+    root.columnconfigure(1, weight=1)
+
+    style = ttk.Style(root)
+    style.theme_use("clam")
+
+    style.configure(
+        "Google.TCombobox",
+        fieldbackground=WHITE,
+        background=WHITE,
+        foreground=TEXT_COLOR,
+        bordercolor=LIGHT_BORDER,
+        arrowsize=16,
+        padding=4,
+    )
 
     logo_image = None
     logo_path = resource_path("logo.png")
@@ -479,75 +569,181 @@ def setup_gui() -> None:
             logo_image = None
 
     if logo_image is not None:
-        logo_label = tk.Label(root, image=logo_image, bg="navy")
+        logo_label = tk.Label(root, image=logo_image, bg=BG_COLOR)
         logo_label.image = logo_image
-        logo_label.grid(row=14, column=0, columnspan=2, padx=10, pady=30)
+        logo_label.grid(row=0, column=0, columnspan=2, pady=(20, 6))
     else:
         logo_label = tk.Label(
             root,
             text="GDSCBME Certificate Generator",
-            bg="navy",
-            fg="white",
-            font=("Helvetica", 12, "bold"),
+            bg=BG_COLOR,
+            fg=TEXT_COLOR,
+            font=("Helvetica", 14, "bold"),
         )
-        logo_label.grid(row=14, column=0, columnspan=2, padx=10, pady=30)
+        logo_label.grid(row=0, column=0, columnspan=2, pady=(10, 6))
 
     filepath = tk.StringVar()
+    selected_file_var = tk.StringVar(value="No file selected")
     eligibility_var = tk.StringVar(value="Checked-in only")
     progress_var = tk.StringVar(value="Ready")
 
+    label_font = ("Helvetica", 11, "bold")
+    entry_font = ("Helvetica", 11)
+    button_font = ("Helvetica", 12, "bold")
+
     def select_csv_file_button() -> None:
-        filepath.set(select_csv_file() or "")
+        selected_path = select_csv_file() or ""
+        filepath.set(selected_path)
 
-    csv_button = tk.Button(root, text="Select CSV File", command=select_csv_file_button)
-    csv_button.grid(row=0, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
-    csv_button.config(width=20, height=2, font=("Helvetica", 12))
+        if selected_path:
+            selected_file_var.set(f"Selected file: {Path(selected_path).name}")
+        else:
+            selected_file_var.set("No file selected")
 
-    event_title_label = tk.Label(root, text="Event Title:", bg="navy", fg="white", font=(9))
-    event_title_entry = tk.Entry(root, width=50)
+    csv_button = tk.Button(
+        root,
+        text="Select CSV File",
+        command=select_csv_file_button,
+        bg=GOOGLE_BLUE,
+        fg=WHITE,
+        activebackground="#3367D6",
+        activeforeground=WHITE,
+        relief="flat",
+        bd=0,
+        cursor="hand2",
+        font=button_font,
+        height=1,
+        padx=12,
+        pady=12,
+    )
+    csv_button.grid(row=1, column=0, columnspan=2, sticky="ew", padx=20, pady=(6, 10))
 
-    event_date_label = tk.Label(root, text="Event Date (DD/MM/YYYY):", bg="navy", fg="white", font=(9))
-    event_date_entry = tk.Entry(root, width=50)
+    selected_file_label = tk.Label(
+        root,
+        textvariable=selected_file_var,
+        bg=BG_COLOR,
+        fg="#6B7280",
+        font=("Helvetica", 9),
+        anchor="w",
+        justify="left",
+        wraplength=700,
+    )
+    selected_file_label.grid(row=2, column=0, columnspan=2, sticky="w", padx=22, pady=(0, 4))
 
-    participant_name_label = tk.Label(root, text="Participant Name:", bg="navy", fg="white", font=(9))
-    participant_name_entry = tk.Entry(root, width=50)
+    event_title_label = tk.Label(
+        root,
+        text="Event Title:",
+        bg=BG_COLOR,
+        fg=TEXT_COLOR,
+        font=label_font,
+    )
+    event_title_entry = tk.Entry(
+        root,
+        width=40,
+        bg=WHITE,
+        fg=TEXT_COLOR,
+        insertbackground=TEXT_COLOR,
+        relief="solid",
+        bd=1,
+        font=entry_font,
+    )
 
-    eligibility_label = tk.Label(root, text="Eligibility Mode:", bg="navy", fg="white", font=(9))
+    event_date_label = tk.Label(
+        root,
+        text="Event Date (DD/MM/YYYY):",
+        bg=BG_COLOR,
+        fg=TEXT_COLOR,
+        font=label_font,
+    )
+    event_date_entry = tk.Entry(
+        root,
+        width=40,
+        bg=WHITE,
+        fg=TEXT_COLOR,
+        insertbackground=TEXT_COLOR,
+        relief="solid",
+        bd=1,
+        font=entry_font,
+    )
+
+    participant_name_label = tk.Label(
+        root,
+        text="Participant Name:",
+        bg=BG_COLOR,
+        fg=TEXT_COLOR,
+        font=label_font,
+    )
+    participant_name_entry = tk.Entry(
+        root,
+        width=40,
+        bg=WHITE,
+        fg=TEXT_COLOR,
+        insertbackground=TEXT_COLOR,
+        relief="solid",
+        bd=1,
+        font=entry_font,
+    )
+
+    eligibility_label = tk.Label(
+        root,
+        text="Eligibility Mode:",
+        bg=BG_COLOR,
+        fg=TEXT_COLOR,
+        font=label_font,
+    )
     eligibility_menu = ttk.Combobox(
         root,
         textvariable=eligibility_var,
         values=["Checked-in only", "All registrants"],
         state="readonly",
-        width=47,
+        style="Google.TCombobox",
+        font=entry_font,
     )
 
-    progress_label = tk.Label(root, textvariable=progress_var, bg="navy", fg="white", font=("Helvetica", 10, "bold"))
-    progress_bar = ttk.Progressbar(root, orient="horizontal", mode="determinate", length=400)
+    progress_label = tk.Label(
+        root,
+        textvariable=progress_var,
+        bg=BG_COLOR,
+        fg=GOOGLE_BLUE,
+        font=("Helvetica", 11, "bold"),
+    )
+    progress_bar = CanvasProgressBar(root, height=22)
+    progress_bar["maximum"] = 100
+    progress_bar["value"] = 0
 
-    event_title_label.grid(row=1, column=0, padx=10, pady=5, sticky="w")
-    event_title_entry.grid(row=1, column=1, padx=10, pady=5)
+    event_title_label.grid(row=3, column=0, padx=(20, 12), pady=8, sticky="w")
+    event_title_entry.grid(row=3, column=1, padx=(0, 20), pady=8, sticky="ew")
 
-    event_date_label.grid(row=2, column=0, padx=10, pady=5, sticky="w")
-    event_date_entry.grid(row=2, column=1, padx=10, pady=5)
+    event_date_label.grid(row=4, column=0, padx=(20, 12), pady=8, sticky="w")
+    event_date_entry.grid(row=4, column=1, padx=(0, 20), pady=8, sticky="ew")
 
-    participant_name_label.grid(row=3, column=0, padx=10, pady=5, sticky="w")
-    participant_name_entry.grid(row=3, column=1, padx=10, pady=5)
+    participant_name_label.grid(row=5, column=0, padx=(20, 12), pady=8, sticky="w")
+    participant_name_entry.grid(row=5, column=1, padx=(0, 20), pady=8, sticky="ew")
 
-    eligibility_label.grid(row=4, column=0, padx=10, pady=5, sticky="w")
-    eligibility_menu.grid(row=4, column=1, padx=10, pady=5)
+    eligibility_label.grid(row=6, column=0, padx=(20, 12), pady=8, sticky="w")
+    eligibility_menu.grid(row=6, column=1, padx=(0, 20), pady=8, sticky="ew")
 
-    progress_label.grid(row=5, column=0, columnspan=2, padx=10, pady=(10, 5), sticky="w")
-    progress_bar.grid(row=6, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="ew")
+    progress_label.grid(row=7, column=0, columnspan=2, padx=20, pady=(16, 6), sticky="w")
+    progress_bar.grid(row=8, column=0, columnspan=2, padx=20, pady=(0, 18), sticky="ew")
 
     def generate_certificates_button() -> None:
         if not filepath.get():
-            messagebox.showerror("No CSV file selected", "Please select a CSV file before generating certificates")
+            messagebox.showerror(
+                "No CSV file selected",
+                "Please select a CSV file before generating certificates",
+            )
             return
         if not validate_date(event_date_entry.get()):
-            messagebox.showerror("Invalid date", "Please enter a valid date in the format DD/MM/YYYY")
+            messagebox.showerror(
+                "Invalid date",
+                "Please enter a valid date in the format DD/MM/YYYY",
+            )
             return
         if not event_title_entry.get().strip():
-            messagebox.showerror("Missing event title", "Please enter the event title")
+            messagebox.showerror(
+                "Missing event title",
+                "Please enter the event title",
+            )
             return
 
         generate_certificates(
@@ -580,29 +776,77 @@ def setup_gui() -> None:
             root,
         )
 
-    generate_button = tk.Button(root, text="Generate Certificates", command=generate_certificates_button)
-    generate_button.config(width=20, height=2, font=("Helvetica", 12))
-    generate_button.grid(row=7, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+    generate_button = tk.Button(
+        root,
+        text="Generate Certificates",
+        command=generate_certificates_button,
+        bg=GOOGLE_GREEN,
+        fg=WHITE,
+        activebackground="#2D9249",
+        activeforeground=WHITE,
+        relief="flat",
+        bd=0,
+        cursor="hand2",
+        font=button_font,
+        height=1,
+        padx=12,
+        pady=12,
+    )
+    generate_button.grid(row=9, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
 
     preview_button = tk.Button(
         root,
         text="Preview Single Certificate",
         command=preview_single_certificate_button,
+        bg=GOOGLE_YELLOW,
+        fg=WHITE,
+        activebackground="#E2A800",
+        activeforeground=WHITE,
+        relief="flat",
+        bd=0,
+        cursor="hand2",
+        font=button_font,
+        height=1,
+        padx=12,
+        pady=12,
     )
-    preview_button.config(width=20, height=2, font=("Helvetica", 12))
-    preview_button.grid(row=8, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+    preview_button.grid(row=10, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
 
     single_generate_button = tk.Button(
         root,
         text="Generate Single Certificate",
         command=generate_single_certificate_button,
+        bg=GOOGLE_BLUE,
+        fg=WHITE,
+        activebackground="#3367D6",
+        activeforeground=WHITE,
+        relief="flat",
+        bd=0,
+        cursor="hand2",
+        font=button_font,
+        height=1,
+        padx=12,
+        pady=12,
     )
-    single_generate_button.config(width=20, height=2, font=("Helvetica", 12))
-    single_generate_button.grid(row=9, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+    single_generate_button.grid(row=11, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
 
-    upload_button = tk.Button(root, text="Upload to Drive", command=upload_to_drive)
-    upload_button.config(width=20, height=2, font=("Helvetica", 12))
-    upload_button.grid(row=10, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+    upload_button = tk.Button(
+        root,
+        text="Upload to Drive",
+        command=upload_to_drive,
+        bg=GOOGLE_RED,
+        fg=WHITE,
+        activebackground="#C5221F",
+        activeforeground=WHITE,
+        relief="flat",
+        bd=0,
+        cursor="hand2",
+        font=button_font,
+        height=1,
+        padx=12,
+        pady=12,
+    )
+    upload_button.grid(row=12, column=0, columnspan=2, sticky="ew", padx=20, pady=(8, 20))
 
     root.mainloop()
 
