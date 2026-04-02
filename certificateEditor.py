@@ -93,19 +93,75 @@ def _safe_filename(name: str, index: int | None = None) -> str:
 
     return cleaned
 
-def _unique_output_path(save_dir_path: Path, full_name: str, index: int) -> Path:
+def _unique_output_base_path(
+    save_dir_path: Path,
+    full_name: str,
+    index: int,
+    suffixes: list[str],
+) -> Path:
     base_name = _safe_filename(full_name, index + 1)
-    candidate = save_dir_path / f"{base_name}.jpg"
+    candidate = save_dir_path / base_name
 
-    if not candidate.exists():
+    if not any((candidate.with_suffix(suffix)).exists() for suffix in suffixes):
         return candidate
 
     counter = 2
     while True:
-        candidate = save_dir_path / f"{base_name} ({counter}).jpg"
-        if not candidate.exists():
+        candidate = save_dir_path / f"{base_name} ({counter})"
+        if not any((candidate.with_suffix(suffix)).exists() for suffix in suffixes):
             return candidate
         counter += 1
+
+
+def _unique_output_path(save_dir_path: Path, full_name: str, index: int) -> Path:
+    base_path = _unique_output_base_path(
+        save_dir_path=save_dir_path,
+        full_name=full_name,
+        index=index,
+        suffixes=[".jpg"],
+    )
+    return base_path.with_suffix(".jpg")
+
+
+def _save_certificate_outputs(
+    template: Image.Image,
+    save_dir_path: Path,
+    full_name: str,
+    index: int,
+    output_format: str,
+) -> list[str]:
+    normalized_format = str(output_format).strip().upper()
+
+    if normalized_format == "JPG":
+        suffixes = [".jpg"]
+    elif normalized_format == "PDF":
+        suffixes = [".pdf"]
+    elif normalized_format == "BOTH":
+        suffixes = [".jpg", ".pdf"]
+    else:
+        raise ValueError(f"Unsupported output format: {output_format}")
+
+    base_output_path = _unique_output_base_path(
+        save_dir_path=save_dir_path,
+        full_name=full_name,
+        index=index,
+        suffixes=suffixes,
+    )
+
+    saved_paths: list[str] = []
+
+    if ".jpg" in suffixes:
+        jpg_path = base_output_path.with_suffix(".jpg")
+        template.save(jpg_path, format="JPEG", quality=95)
+        saved_paths.append(str(jpg_path))
+
+    if ".pdf" in suffixes:
+        pdf_path = base_output_path.with_suffix(".pdf")
+        template.convert("RGB").save(pdf_path, format="PDF", resolution=100.0)
+        saved_paths.append(str(pdf_path))
+
+    return saved_paths
+
 
 def _load_font(font_path: str, size: int):
     try:
@@ -214,6 +270,7 @@ def edit_certificate(
     regular_font_path: str,
     save_dir: str,
     progress_callback=None,
+    output_format: str = "JPG",
 ):
     save_dir_path = Path(save_dir)
     save_dir_path.mkdir(parents=True, exist_ok=True)
@@ -241,7 +298,7 @@ def edit_certificate(
     _load_font(arabic_name_font_path, 40)
     _load_font(arabic_regular_font_path, 40)
 
-    list_of_jpgs_paths = []
+    list_of_output_paths = []
 
     for index, full_name in enumerate(attendees_list):
         print(f"Now processing: {full_name}")
@@ -304,16 +361,21 @@ def edit_certificate(
         date_font = _load_font(regular_font_path, DATE_FONT_SIZE)
         draw.text((DATE_X, DATE_Y), pretty_date, fill=(120, 120, 120), font=date_font)
 
-        output_path = _unique_output_path(save_dir_path, full_name, index)
-        template.save(output_path, format="JPEG", quality=95)
+        saved_paths = _save_certificate_outputs(
+            template=template,
+            save_dir_path=save_dir_path,
+            full_name=full_name,
+            index=index,
+            output_format=output_format,
+        )
 
-        list_of_jpgs_paths.append(str(output_path))
+        list_of_output_paths.extend(saved_paths)
         print(f"Processing Certificate {index + 1}/{len(attendees_list)} - {full_name}")
 
         if progress_callback is not None:
             progress_callback(index + 1, len(attendees_list), full_name)
 
-    return list_of_jpgs_paths
+    return list_of_output_paths
 
 def preview_certificate(
     template_path: str,
@@ -332,5 +394,6 @@ def preview_certificate(
         name_font_path=name_font_path,
         regular_font_path=regular_font_path,
         save_dir=save_dir,
+        output_format="JPG",
     )
     return generated_paths[0] if generated_paths else None

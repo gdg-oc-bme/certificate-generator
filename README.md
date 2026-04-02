@@ -11,6 +11,7 @@ The application currently supports:
 * Unicode and Arabic name support
 * automatic participant name capitalization
 * optional Google Drive upload
+* configurable certificate output format: PDF, JPG, or Both (PDF by default)
 * email distribution with certificate attachments
 * editable email subject/body templates
 * preview of matched / missing / ambiguous recipients
@@ -32,15 +33,17 @@ The application currently supports:
 9. Warn about duplicate names in the CSV.
 10. Warn about very long names that may appear small on the certificate.
 11. Upload generated certificate folders to Google Drive.
-12. Preview email distribution before sending.
-13. Match generated certificates to recipients using normalized names.
-14. Export a distribution report showing matched, missing, and ambiguous certificates.
-15. Save and reload email subject/body drafts.
-16. Send matched certificates by email through Gmail API.
-17. Skip already-sent recipients using resend protection.
-18. Show the connected Gmail account before final sending.
-19. Require typed confirmation for larger email batches.
-20. Generate email send reports after sending.
+12. Generate certificates as PDF, JPG, or both.
+13. Use PDF as the default output format for certificate generation.
+14. Preview email distribution before sending.
+15. Match generated certificates to recipients using normalized names.
+16. Export a distribution report showing matched, missing, and ambiguous certificates.
+17. Save and reload email subject/body drafts.
+18. Send matched certificates by email through Gmail API.
+19. Skip already-sent recipients using resend protection.
+20. Show the connected Gmail account before final sending.
+21. Require typed confirmation for larger email batches.
+22. Generate email send reports after sending.
 
 # Rules for contributing
 
@@ -118,7 +121,12 @@ python GUI.py
 
    * `Checked-in only`
    * `All registrants`
-6. Click **Generate Certificates**.
+6. Choose the output format:
+
+   * `PDF`
+   * `JPG`
+   * `Both`
+7. Click **Generate Certificates**.
 
 The app will:
 
@@ -134,7 +142,11 @@ The app will:
 1. Enter the event title.
 2. Enter the event date.
 3. Type a participant name.
-4. Click **Generate Single Certificate**.
+4. Choose the output format:
+   * `PDF`
+   * `JPG`
+   * `Both`
+5. Click **Generate Single Certificate**.
 
 This is useful for:
 
@@ -179,6 +191,8 @@ The app also saves:
 * `distribution_report.csv`
 * `email_draft.json`
 * `email_send_report.csv`
+
+When matching certificate files for email distribution, the app prefers the PDF version if both PDF and JPG exist for the same participant.
 
 # CSV Requirements
 
@@ -231,9 +245,21 @@ Arabic names are handled using:
 
 The current setup uses Windows system Arial fonts for Arabic rendering.
 
+# Certificate Output Formats
+
+The generator supports three output modes:
+
+* `PDF` — generates certificates as PDF files
+* `JPG` — generates certificates as image files
+* `Both` — generates both PDF and JPG versions
+
+The default output format in the GUI is `PDF`.
+
+Certificate preview remains image-based so you can quickly check layout before exporting.
+
 # Google Integration
 
-The app can upload generated certificate folders to Google Drive.
+The app integrates with Google Drive for certificate uploads and Gmail for certificate distribution.
 
 ## Google Authentication Files
 

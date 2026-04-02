@@ -13,6 +13,7 @@ from driveUpload import Upload, DriveAuthError
 
 import sys
 import re
+import inspect
 
 from certificateDistribution import (
     read_recipients_from_file,
@@ -360,11 +361,15 @@ def generate_certificates(
     progress_var: tk.StringVar,
     progress_bar: CanvasProgressBar,
     root: tk.Tk,
+    output_format_var: tk.StringVar | None = None,
 ) -> None:
     event_title = event_title_entry.get().strip()
     event_date = event_date_entry.get().strip()
     checked_in_only = eligibility_var.get() == "Checked-in only"
-
+    if output_format_var is None:
+        output_format = "PDF"
+    else:
+        output_format = output_format_var.get().strip() or "PDF"
     save_dir = select_output_directory(event_title, event_date)
     if not save_dir:
         return
@@ -403,6 +408,11 @@ def generate_certificates(
             progress_var.set(f"Generating {current} / {total}: {full_name}")
             root.update_idletasks()
 
+        edit_kwargs = {"progress_callback": on_progress}
+
+        if "output_format" in inspect.signature(ce.edit_certificate).parameters:
+            edit_kwargs["output_format"] = output_format
+
         ce.edit_certificate(
             "template_certificate_no_line.jpg",
             attendees_list,
@@ -411,7 +421,7 @@ def generate_certificates(
             ce.name_font_path,
             ce.regular_font_path,
             save_dir,
-            progress_callback=on_progress,
+            **edit_kwargs,
         )
 
         mode_label = "Checked-in only" if checked_in_only else "All registrants"
@@ -420,6 +430,7 @@ def generate_certificates(
             f"Certificates generated successfully!\n\n"
             f"Saved to:\n{save_dir}\n\n"
             f"Eligibility mode: {mode_label}\n"
+            f"Output format: {output_format}\n"
             f"Total rows in CSV: {report['total_rows']}\n"
             f"Eligible rows: {report['eligible_count']}\n"
             f"Certificates created: {report['accepted_count']}\n"
@@ -450,10 +461,15 @@ def generate_single_certificate(
     progress_var: tk.StringVar,
     progress_bar: CanvasProgressBar,
     root: tk.Tk,
+    output_format_var: tk.StringVar | None = None,
 ) -> None:
     participant_name = capitalize_initials_only(participant_name_entry.get().strip())
     event_title = event_title_entry.get().strip()
     event_date = event_date_entry.get().strip()
+    if output_format_var is None:
+        output_format = "PDF"
+    else:
+        output_format = output_format_var.get().strip() or "PDF"
 
     participant_name_entry.delete(0, tk.END)
     participant_name_entry.insert(0, participant_name)
@@ -486,6 +502,11 @@ def generate_single_certificate(
             progress_var.set(f"Generating {current} / {total}: {full_name}")
             root.update_idletasks()
 
+        edit_kwargs = {"progress_callback": on_progress}
+
+        if "output_format" in inspect.signature(ce.edit_certificate).parameters:
+            edit_kwargs["output_format"] = output_format
+
         ce.edit_certificate(
             "template_certificate_no_line.jpg",
             [participant_name],
@@ -494,7 +515,7 @@ def generate_single_certificate(
             ce.name_font_path,
             ce.regular_font_path,
             save_dir,
-            progress_callback=on_progress,
+            **edit_kwargs,
         )
 
         participant_name_entry.delete(0, tk.END)
@@ -505,7 +526,9 @@ def generate_single_certificate(
 
         messagebox.showinfo(
             "Generation complete",
-            f"Certificate generated successfully for:\n{participant_name}\n\nSaved to:\n{save_dir}"
+            f"Certificate generated successfully for:\n{participant_name}\n\n"
+            f"Output format: {output_format}\n"
+            f"Saved to:\n{save_dir}"
         )
         open_folder(save_dir)
 
@@ -593,8 +616,8 @@ def upload_to_drive() -> None:
 def setup_gui() -> None:
     root = tk.Tk()
     root.title("GDSCBME Certificate Generator")
-    root.geometry("760x830")
-    root.minsize(700, 760)
+    root.geometry("760x880")
+    root.minsize(700, 810)
     root.configure(bg=BG_COLOR)
 
     root.columnconfigure(0, weight=0)
@@ -638,6 +661,7 @@ def setup_gui() -> None:
     filepath = tk.StringVar()
     selected_file_var = tk.StringVar(value="No file selected")
     eligibility_var = tk.StringVar(value="Checked-in only")
+    output_format_var = tk.StringVar(value="PDF")
     progress_var = tk.StringVar(value="Ready")
 
     label_font = ("Helvetica", 11, "bold")
@@ -753,6 +777,22 @@ def setup_gui() -> None:
         font=entry_font,
     )
 
+    output_format_label = tk.Label(
+        root,
+        text="Output Format:",
+        bg=BG_COLOR,
+        fg=TEXT_COLOR,
+        font=label_font,
+    )
+    output_format_menu = ttk.Combobox(
+        root,
+        textvariable=output_format_var,
+        values=["PDF", "JPG", "Both"],
+        state="readonly",
+        style="Google.TCombobox",
+        font=entry_font,
+    )
+
     progress_label = tk.Label(
         root,
         textvariable=progress_var,
@@ -776,8 +816,11 @@ def setup_gui() -> None:
     eligibility_label.grid(row=6, column=0, padx=(20, 12), pady=8, sticky="w")
     eligibility_menu.grid(row=6, column=1, padx=(0, 20), pady=8, sticky="ew")
 
-    progress_label.grid(row=7, column=0, columnspan=2, padx=20, pady=(16, 6), sticky="w")
-    progress_bar.grid(row=8, column=0, columnspan=2, padx=20, pady=(0, 18), sticky="ew")
+    output_format_label.grid(row=7, column=0, padx=(20, 12), pady=8, sticky="w")
+    output_format_menu.grid(row=7, column=1, padx=(0, 20), pady=8, sticky="ew")
+
+    progress_label.grid(row=8, column=0, columnspan=2, padx=20, pady=(3, 1), sticky="w")
+    progress_bar.grid(row=9, column=0, columnspan=2, padx=20, pady=(0, 6), sticky="ew")
 
     def generate_certificates_button() -> None:
         if not filepath.get():
@@ -807,6 +850,7 @@ def setup_gui() -> None:
             progress_var,
             progress_bar,
             root,
+            output_format_var=output_format_var,
         )
 
     def generate_single_certificate_button() -> None:
@@ -817,6 +861,7 @@ def setup_gui() -> None:
             progress_var,
             progress_bar,
             root,
+            output_format_var=output_format_var,
         )
 
     def preview_single_certificate_button() -> None:
@@ -1283,7 +1328,7 @@ def setup_gui() -> None:
         padx=12,
         pady=12,
     )
-    generate_button.grid(row=9, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
+    generate_button.grid(row=10, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
 
     preview_button = tk.Button(
         root,
@@ -1301,7 +1346,7 @@ def setup_gui() -> None:
         padx=12,
         pady=12,
     )
-    preview_button.grid(row=10, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
+    preview_button.grid(row=11, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
 
     single_generate_button = tk.Button(
         root,
@@ -1319,7 +1364,7 @@ def setup_gui() -> None:
         padx=12,
         pady=12,
     )
-    single_generate_button.grid(row=11, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
+    single_generate_button.grid(row=12, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
 
     upload_button = tk.Button(
         root,
@@ -1337,7 +1382,7 @@ def setup_gui() -> None:
         padx=12,
         pady=12,
     )
-    upload_button.grid(row=12, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
+    upload_button.grid(row=13, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
 
     distribute_button = tk.Button(
         root,
@@ -1355,7 +1400,7 @@ def setup_gui() -> None:
         padx=12,
         pady=12,
     )
-    distribute_button.grid(row=13, column=0, columnspan=2, sticky="ew", padx=20, pady=(8, 20))
+    distribute_button.grid(row=14, column=0, columnspan=2, sticky="ew", padx=20, pady=(8, 20))
 
     root.mainloop()
 

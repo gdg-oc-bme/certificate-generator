@@ -13,6 +13,13 @@ from email.message import EmailMessage
 
 SUPPORTED_CERTIFICATE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
 
+CERTIFICATE_EXTENSION_PRIORITY = {
+    ".pdf": 0,
+    ".jpg": 1,
+    ".jpeg": 2,
+    ".png": 3,
+}
+
 
 def is_name_present(first_name: str, last_name: str) -> bool:
     return bool(str(first_name).strip()) and bool(str(last_name).strip())
@@ -117,6 +124,32 @@ def find_certificate_files(folder_path: str) -> list[Path]:
     return sorted(files, key=lambda p: p.name.lower())
 
 
+def _prefer_best_equivalent_candidates(candidates: list[dict]) -> list[dict]:
+    preferred_by_normalized_name: dict[str, dict] = {}
+
+    for item in candidates:
+        key = item["normalized_name"]
+        existing = preferred_by_normalized_name.get(key)
+
+        if existing is None:
+            preferred_by_normalized_name[key] = item
+            continue
+
+        current_priority = CERTIFICATE_EXTENSION_PRIORITY.get(
+            item["path"].suffix.lower(),
+            99,
+        )
+        existing_priority = CERTIFICATE_EXTENSION_PRIORITY.get(
+            existing["path"].suffix.lower(),
+            99,
+        )
+
+        if current_priority < existing_priority:
+            preferred_by_normalized_name[key] = item
+
+    return list(preferred_by_normalized_name.values())
+
+
 def match_certificates_to_recipients(
     recipients: list[dict],
     folder_path: str,
@@ -166,6 +199,7 @@ def match_certificates_to_recipients(
         unique_candidates = list({
             str(item["path"]): item for item in candidates
         }.values())
+        unique_candidates = _prefer_best_equivalent_candidates(unique_candidates)
 
         if len(unique_candidates) == 1:
             matched_count += 1
