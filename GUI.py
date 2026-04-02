@@ -6,13 +6,24 @@ from collections import Counter
 
 import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, ttk, scrolledtext
 
 import certificateEditor as ce
 from driveUpload import Upload, DriveAuthError
 
 import sys
 import re
+
+from certificateDistribution import (
+    read_recipients_from_file,
+    match_certificates_to_recipients,
+    export_distribution_report,
+    save_email_draft,
+    load_email_draft,
+    send_matched_certificates,
+    split_already_sent_matches,
+    GmailAuthError,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -122,6 +133,14 @@ def select_upload_path() -> str | None:
         return filepath
     return None
 
+def select_certificates_folder() -> str | None:
+    folder_path = filedialog.askdirectory(
+        title="Select Folder That Contains Generated Certificates"
+    )
+    if folder_path:
+        print(f"You selected: {folder_path}")
+        return folder_path
+    return None
 
 def certificates_save_dir() -> str | None:
     save_directory = filedialog.askdirectory(title="Select Directory to Save Certificates")
@@ -297,7 +316,6 @@ def read_names_from_file(
     }
 
     return accepted_names, report
-
 
 def generate_certificates(
     filepath: str,
@@ -540,8 +558,8 @@ def upload_to_drive() -> None:
 def setup_gui() -> None:
     root = tk.Tk()
     root.title("GDSCBME Certificate Generator")
-    root.geometry("760x760")
-    root.minsize(700, 700)
+    root.geometry("760x830")
+    root.minsize(700, 760)
     root.configure(bg=BG_COLOR)
 
     root.columnconfigure(0, weight=0)
@@ -776,6 +794,432 @@ def setup_gui() -> None:
             root,
         )
 
+    def open_email_template_window(
+        matches: list[dict],
+        match_report: dict,
+        certificates_folder: str,
+    ) -> None:
+        matched_rows = [item for item in matches if item.get("status") == "matched"]
+        existing_draft = load_email_draft(certificates_folder)
+
+        default_subject = "Your certificate for {event_title}"
+        default_body = (
+            "Hello {full_name},\n\n"
+            "Thank you for attending {event_title} on {event_date}.\n"
+            "Please find your certificate attached.\n\n"
+            "Best regards,\n"
+            "GDG on Campus BME"
+        )
+
+        if existing_draft:
+            default_subject = existing_draft.get("subject_template", default_subject)
+            default_body = existing_draft.get("body_template", default_body)
+
+        window = tk.Toplevel(root)
+        window.title("Email Template")
+        window.geometry("720x560")
+        window.minsize(680, 500)
+        window.configure(bg=BG_COLOR)
+
+        window.columnconfigure(0, weight=0)
+        window.columnconfigure(1, weight=1)
+
+        info_text = (
+            f"Matched recipients: {match_report['matched_count']}\n"
+            f"Missing certificates: {match_report['missing_certificate_count']}\n"
+            f"Ambiguous matches: {match_report['ambiguous_certificate_count']}"
+        )
+
+        info_label = tk.Label(
+            window,
+            text=info_text,
+            bg=BG_COLOR,
+            fg=TEXT_COLOR,
+            font=("Helvetica", 10, "bold"),
+            anchor="w",
+            justify="left",
+        )
+        info_label.grid(row=0, column=0, columnspan=2, padx=20, pady=(20, 12), sticky="w")
+
+        subject_label = tk.Label(
+            window,
+            text="Email Subject:",
+            bg=BG_COLOR,
+            fg=TEXT_COLOR,
+            font=("Helvetica", 11, "bold"),
+        )
+        subject_label.grid(row=1, column=0, padx=(20, 12), pady=8, sticky="w")
+
+        subject_entry = tk.Entry(
+            window,
+            bg=WHITE,
+            fg=TEXT_COLOR,
+            insertbackground=TEXT_COLOR,
+            relief="solid",
+            bd=1,
+            font=("Helvetica", 11),
+        )
+        subject_entry.grid(row=1, column=1, padx=(0, 20), pady=8, sticky="ew")
+        subject_entry.insert(0, default_subject)
+
+        body_label = tk.Label(
+            window,
+            text="Email Body:",
+            bg=BG_COLOR,
+            fg=TEXT_COLOR,
+            font=("Helvetica", 11, "bold"),
+        )
+        body_label.grid(row=2, column=0, padx=(20, 12), pady=8, sticky="nw")
+
+        body_text = scrolledtext.ScrolledText(
+            window,
+            height=10,
+            bg=WHITE,
+            fg=TEXT_COLOR,
+            insertbackground=TEXT_COLOR,
+            relief="solid",
+            bd=1,
+            font=("Helvetica", 11),
+            wrap="word",
+        )
+        body_text.grid(row=2, column=1, padx=(0, 20), pady=8, sticky="nsew")
+        body_text.insert("1.0", default_body)
+
+        help_label = tk.Label(
+            window,
+            text="You can use: {full_name}, {event_title}, {event_date}",
+            bg=BG_COLOR,
+            fg="#6B7280",
+            font=("Helvetica", 9),
+            anchor="w",
+            justify="left",
+        )
+        help_label.grid(row=3, column=1, padx=(0, 20), pady=(0, 10), sticky="w")
+
+        preview_box_label = tk.Label(
+            window,
+            text="Matched recipients preview:",
+            bg=BG_COLOR,
+            fg=TEXT_COLOR,
+            font=("Helvetica", 11, "bold"),
+        )
+        preview_box_label.grid(row=4, column=0, padx=(20, 12), pady=8, sticky="nw")
+
+        preview_box = scrolledtext.ScrolledText(
+            window,
+            height=10,
+            bg=WHITE,
+            fg=TEXT_COLOR,
+            relief="solid",
+            bd=1,
+            font=("Consolas", 10),
+            wrap="word",
+        )
+        preview_box.grid(row=4, column=1, padx=(0, 20), pady=8, sticky="nsew")
+
+        preview_lines = []
+        for item in matched_rows[:20]:
+            preview_lines.append(f"{item['full_name']}  <{item['email']}>")
+        if len(matched_rows) > 20:
+            preview_lines.append(f"\n...and {len(matched_rows) - 20} more")
+
+        preview_box.insert("1.0", "\n".join(preview_lines) if preview_lines else "No matched recipients.")
+        preview_box.config(state="disabled")
+
+        def save_email_draft_button() -> None:
+            subject = subject_entry.get().strip()
+            body = body_text.get("1.0", tk.END).strip()
+
+            if not subject:
+                messagebox.showerror(
+                    "Missing email subject",
+                    "Please enter the email subject.",
+                    parent=window,
+                )
+                return
+
+            if not body:
+                messagebox.showerror(
+                    "Missing email body",
+                    "Please enter the email body.",
+                    parent=window,
+                )
+                return
+
+            try:
+                saved_path = save_email_draft(
+                    certificates_folder,
+                    subject,
+                    body,
+                    event_title_entry.get().strip(),
+                    event_date_entry.get().strip(),
+                )
+
+                messagebox.showinfo(
+                    "Draft saved",
+                    f"Email draft saved successfully.\n\nSaved to:\n{saved_path}",
+                    parent=window,
+                )
+            except Exception as e:
+                messagebox.showerror(
+                    "Save failed",
+                    f"Could not save email draft:\n{e}",
+                    parent=window,
+                )
+                
+
+        def send_emails_button() -> None:
+            subject = subject_entry.get().strip()
+            body = body_text.get("1.0", tk.END).strip()
+
+            if not subject:
+                messagebox.showerror(
+                    "Missing email subject",
+                    "Please enter the email subject.",
+                    parent=window,
+                )
+                return
+
+            if not body:
+                messagebox.showerror(
+                    "Missing email body",
+                    "Please enter the email body.",
+                    parent=window,
+                )
+                return
+
+            event_title = event_title_entry.get().strip()
+            event_date = event_date_entry.get().strip()
+
+            needs_event_title = "{event_title}" in subject or "{event_title}" in body
+            needs_event_date = "{event_date}" in subject or "{event_date}" in body
+
+            if needs_event_title and not event_title:
+                messagebox.showerror(
+                    "Missing event title",
+                    "Your email template uses {event_title}, so please fill in the Event Title field.",
+                    parent=window,
+                )
+                return
+
+            if needs_event_date and not validate_date(event_date):
+                messagebox.showerror(
+                    "Invalid event date",
+                    "Your email template uses {event_date}, so please enter a valid date in the format DD/MM/YYYY.",
+                    parent=window,
+                )
+                return
+
+            send_report_path = os.path.join(certificates_folder, "email_send_report.csv")
+
+            pending_matches, already_sent_matches = split_already_sent_matches(
+                matches,
+                send_report_path,
+            )
+
+            if already_sent_matches:
+                choice = messagebox.askyesnocancel(
+                    "Previous send report found",
+                    f"{len(already_sent_matches)} matched recipient(s) were already sent successfully.\n\n"
+                    f"Yes = skip already sent and continue\n"
+                    f"No = send all again\n"
+                    f"Cancel = abort",
+                    parent=window,
+                )
+
+                if choice is None:
+                    return
+
+                if choice:
+                    matches_to_send = pending_matches
+                else:
+                    matches_to_send = matches
+            else:
+                matches_to_send = matches
+
+            sendable_count = len([
+                item for item in matches_to_send
+                if item.get("status") == "matched"
+            ])
+
+            if sendable_count == 0:
+                messagebox.showinfo(
+                    "Nothing to send",
+                    "No new matched recipients need to be sent.",
+                    parent=window,
+                )
+                return
+
+            confirm = messagebox.askyesno(
+                "Confirm sending",
+                f"This will send emails to {sendable_count} matched recipient(s).\n\nDo you want to continue?",
+                parent=window,
+            )
+            if not confirm:
+                return
+
+            try:
+                save_email_draft(
+                    certificates_folder,
+                    subject,
+                    body,
+                    event_title,
+                    event_date,
+                )
+
+                send_button.config(state="disabled")
+                save_button.config(state="disabled")
+                window.update_idletasks()
+
+                _, send_report = send_matched_certificates(
+                    matches=matches_to_send,
+                    subject_template=subject,
+                    body_template=body,
+                    event_title=event_title,
+                    event_date=event_date,
+                    client_secret_path=str(resource_path("client_secret.json")),
+                    token_path=str(BASE_DIR / "gmail_token.json"),
+                    report_output_path=send_report_path,
+                )
+
+                message = (
+                    f"Matched recipients: {send_report['matched_count']}\n"
+                    f"Sent successfully: {send_report['sent_count']}\n"
+                    f"Failed: {send_report['failed_count']}\n\n"
+                    f"Send report saved to:\n{send_report_path}"
+                )
+
+                if send_report["failed_count"] > 0 and send_report.get("first_error"):
+                    message += f"\n\nFirst error:\n{send_report['first_error']}"
+
+                messagebox.showinfo(
+                    "Email sending complete",
+                    message,
+                    parent=window,
+                )
+
+            except GmailAuthError as e:
+                messagebox.showerror("Gmail setup required", str(e), parent=window)
+            except Exception as e:
+                messagebox.showerror(
+                    "Email sending failed",
+                    f"Something went wrong:\n{e}",
+                    parent=window,
+                )
+            finally:
+                send_button.config(state="normal")
+                save_button.config(state="normal")
+
+        button_frame = tk.Frame(window, bg=BG_COLOR)
+        button_frame.grid(row=5, column=0, columnspan=2, padx=20, pady=(10, 20), sticky="ew")
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+
+        save_button = tk.Button(
+            button_frame,
+            text="Save Draft",
+            command=save_email_draft_button,
+            bg=GOOGLE_BLUE,
+            fg=WHITE,
+            activebackground="#3367D6",
+            activeforeground=WHITE,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            font=("Helvetica", 11, "bold"),
+            padx=12,
+            pady=10,
+        )
+        save_button.grid(row=0, column=0, padx=(0, 8), sticky="ew")
+
+        send_button = tk.Button(
+            button_frame,
+            text="Send Matched Emails",
+            command=send_emails_button,
+            bg=GOOGLE_GREEN,
+            fg=WHITE,
+            activebackground="#2D9249",
+            activeforeground=WHITE,
+            relief="flat",
+            bd=0,
+            cursor="hand2",
+            font=("Helvetica", 11, "bold"),
+            padx=12,
+            pady=10,
+        )
+        send_button.grid(row=0, column=1, padx=(8, 0), sticky="ew")
+
+        window.rowconfigure(2, weight=1)
+        window.rowconfigure(4, weight=1)
+        
+    def prepare_email_distribution_button() -> None:
+        if not filepath.get():
+            messagebox.showerror(
+                "No CSV file selected",
+                "Please select a CSV file before previewing email distribution",
+            )
+            return
+
+        checked_in_only = eligibility_var.get() == "Checked-in only"
+
+        if not checked_in_only:
+            confirm = messagebox.askyesno(
+                "Confirm preview",
+                "You selected 'All registrants'. This will prepare certificate distribution for everyone with a valid name and email, even if they did not check in.\n\nDo you want to continue?"
+            )
+            if not confirm:
+                return
+
+        certificates_folder = select_certificates_folder()
+        if not certificates_folder:
+            return
+
+        try:
+            recipients, recipient_report = read_recipients_from_file(
+                filepath.get(),
+                checked_in_only=checked_in_only,
+            )
+
+            matches, match_report = match_certificates_to_recipients(
+                recipients,
+                certificates_folder,
+            )
+
+            report_output_path = os.path.join(certificates_folder, "distribution_report.csv")
+            saved_report_path = export_distribution_report(matches, report_output_path)
+
+            mode_label = "Checked-in only" if checked_in_only else "All registrants"
+            skipped_not_checked_in_text = (
+                str(recipient_report["skipped_not_checked_in"])
+                if checked_in_only else "N/A"
+            )
+
+            summary_message = (
+                f"Email distribution preview is ready.\n\n"
+                f"Eligibility mode: {mode_label}\n"
+                f"Total rows in CSV: {recipient_report['total_rows']}\n"
+                f"Eligible rows: {recipient_report['eligible_count']}\n"
+                f"Recipients with valid email: {recipient_report['recipients_count']}\n"
+                f"Skipped not checked in: {skipped_not_checked_in_text}\n"
+                f"Skipped missing first/last name: {recipient_report['skipped_missing_name']}\n"
+                f"Skipped missing email: {recipient_report['skipped_missing_email']}\n\n"
+                f"Certificate files found: {match_report['certificate_files_found']}\n"
+                f"Matched recipients: {match_report['matched_count']}\n"
+                f"Missing certificate file: {match_report['missing_certificate_count']}\n"
+                f"Ambiguous certificate matches: {match_report['ambiguous_certificate_count']}\n\n"
+                f"Report saved to:\n{saved_report_path}"
+            )
+
+            messagebox.showinfo("Distribution preview", summary_message)
+
+            if match_report["matched_count"] > 0:
+                open_email_template_window(matches, match_report, certificates_folder)
+
+        except ValueError as e:
+            messagebox.showerror("Distribution Error", str(e))
+        except Exception as e:
+            messagebox.showerror("Distribution Error", f"Something went wrong:\n{e}")
+
     generate_button = tk.Button(
         root,
         text="Generate Certificates",
@@ -846,7 +1290,25 @@ def setup_gui() -> None:
         padx=12,
         pady=12,
     )
-    upload_button.grid(row=12, column=0, columnspan=2, sticky="ew", padx=20, pady=(8, 20))
+    upload_button.grid(row=12, column=0, columnspan=2, sticky="ew", padx=20, pady=8)
+
+    distribute_button = tk.Button(
+        root,
+        text="Preview Email Distribution",
+        command=prepare_email_distribution_button,
+        bg=GOOGLE_GREEN,
+        fg=WHITE,
+        activebackground="#2D9249",
+        activeforeground=WHITE,
+        relief="flat",
+        bd=0,
+        cursor="hand2",
+        font=button_font,
+        height=1,
+        padx=12,
+        pady=12,
+    )
+    distribute_button.grid(row=13, column=0, columnspan=2, sticky="ew", padx=20, pady=(8, 20))
 
     root.mainloop()
 
