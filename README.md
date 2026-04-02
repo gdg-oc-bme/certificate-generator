@@ -1,6 +1,6 @@
-# Certificate Generator
+# GDG Certificate Generator
 
-This program is used to automate the process of generating and uploading certificates for GDG on Campus BME event participants or core team members.
+This program automates certificate generation, Google Drive upload, and email distribution for GDG on Campus BME event participants or core team members.
 
 The application currently supports:
 
@@ -11,6 +11,12 @@ The application currently supports:
 * Unicode and Arabic name support
 * automatic participant name capitalization
 * optional Google Drive upload
+* email distribution with certificate attachments
+* editable email subject/body templates
+* preview of matched / missing / ambiguous recipients
+* resend protection using previous send reports
+* Gmail account confirmation before sending
+* extra typed confirmation for larger sends
 * automated tests and coverage
 
 # Features
@@ -26,6 +32,15 @@ The application currently supports:
 9. Warn about duplicate names in the CSV.
 10. Warn about very long names that may appear small on the certificate.
 11. Upload generated certificate folders to Google Drive.
+12. Preview email distribution before sending.
+13. Match generated certificates to recipients using normalized names.
+14. Export a distribution report showing matched, missing, and ambiguous certificates.
+15. Save and reload email subject/body drafts.
+16. Send matched certificates by email through Gmail API.
+17. Skip already-sent recipients using resend protection.
+18. Show the connected Gmail account before final sending.
+19. Require typed confirmation for larger email batches.
+20. Generate email send reports after sending.
 
 # Rules for contributing
 
@@ -136,6 +151,35 @@ This is useful for:
 
 This creates a temporary preview and opens it so you can check the layout before generating a full batch.
 
+## Email Distribution
+
+1. Generate certificates first.
+2. Click **Preview Email Distribution**.
+3. Select the folder containing the generated certificates.
+4. Review the summary:
+   * total rows
+   * eligible rows
+   * recipients with valid email
+   * skipped missing email
+   * skipped missing name
+   * skipped not checked in
+   * matched certificate count
+   * missing certificate count
+   * ambiguous match count
+5. Edit the email subject and body templates if needed.
+6. Use placeholders in the templates:
+   * `{full_name}`
+   * `{event_title}`
+   * `{event_date}`
+7. Confirm the Gmail account shown before sending.
+8. For larger batches, type `SEND` when prompted.
+9. Send emails only after reviewing the matched recipients.
+
+The app also saves:
+* `distribution_report.csv`
+* `email_draft.json`
+* `email_send_report.csv`
+
 # CSV Requirements
 
 For checked-in-only generation, the CSV should contain:
@@ -148,6 +192,12 @@ For all-registrants mode, the app only requires:
 
 * `First Name`
 * `Last Name`
+
+For email distribution, the CSV must also contain:
+
+* `Email`
+
+Recipients without an email address are skipped during distribution.
 
 # Name Handling
 
@@ -181,16 +231,21 @@ Arabic names are handled using:
 
 The current setup uses Windows system Arial fonts for Arabic rendering.
 
-# Google Drive Upload
+# Google Integration
 
 The app can upload generated certificate folders to Google Drive.
 
-Required local auth files:
+## Google Authentication Files
 
-* `client_secret.json`
-* `token.json`
+The project may create and use the following local auth files:
+
+* `client_secret.json` — OAuth client credentials
+* `token.json` — Google Drive token
+* `gmail_token.json` — Gmail sending token
 
 These files must **not** be committed to the repository.
+
+If you want to switch the Gmail sending account, delete `gmail_token.json` and sign in again when the app prompts you.
 
 ## Creating a Virtual Environment
 
@@ -246,6 +301,16 @@ Finally, you can leave it with the following:
 deactivate
 ```
 
+## Gmail Sending Safety Checks
+
+Before sending emails, the app will:
+
+* show which Gmail account is currently connected
+* ask for final confirmation before sending
+* require typing `SEND` for larger batches (more than 10 participants at the same time)
+
+This helps prevent sending certificates from the wrong Gmail account or sending a large batch accidentally.
+
 # Installing Packages
 
 The `requirements.txt` file contains the packages deemed necessary at the time of writing. However, this is subject to change.
@@ -288,7 +353,10 @@ The project includes automated tests for:
 * duplicate and long-name detection
 * Unicode and Arabic handling
 * certificate file generation
-* GUI action logic
+* GUI helper and action logic
+* certificate distribution logic
+* Gmail sending helpers
+* Google Drive upload logic
 
 Run all tests:
 
@@ -299,7 +367,7 @@ pytest -v
 Run tests with coverage:
 
 ```bash
-pytest --cov=GUI --cov=certificateEditor --cov-report=term-missing
+pytest --cov=GUI --cov=certificateEditor --cov=certificateDistribution --cov=driveUpload --cov-report=term-missing tests/
 ```
 
 # Building the Windows Executable
