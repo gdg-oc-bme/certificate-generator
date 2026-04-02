@@ -6,7 +6,7 @@ from collections import Counter
 
 import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk, scrolledtext
+from tkinter import filedialog, messagebox, ttk, scrolledtext, simpledialog
 
 import certificateEditor as ce
 from driveUpload import Upload, DriveAuthError
@@ -22,6 +22,7 @@ from certificateDistribution import (
     load_email_draft,
     send_matched_certificates,
     split_already_sent_matches,
+    ensure_connected_gmail_account,
     GmailAuthError,
 )
 
@@ -214,6 +215,40 @@ def find_long_names(names: list[str], max_chars: int = 28, max_words: int = 3) -
         if len(name) > max_chars or len(name.split()) > max_words:
             long_names.append(name)
     return long_names
+
+
+def build_send_confirmation_message(sendable_count: int, sender_email: str) -> str:
+    return (
+        f"This will send emails to {sendable_count} matched recipient(s).\n\n"
+        f"Sending Gmail account:\n<{sender_email}>\n\n"
+        "Do you want to continue?"
+    )
+
+def require_large_send_confirmation(sendable_count: int, parent_window) -> bool:
+    if sendable_count <= 10:
+        return True
+
+    typed_value = simpledialog.askstring(
+        "Large send confirmation",
+        (
+            f"You are about to send {sendable_count} emails.\n\n"
+            "To confirm, type SEND below."
+        ),
+        parent=parent_window,
+    )
+
+    if typed_value is None:
+        return False
+
+    if typed_value.strip().upper() != "SEND":
+        messagebox.showwarning(
+            "Sending cancelled",
+            "Confirmation text did not match. Emails were not sent.",
+            parent=parent_window,
+        )
+        return False
+
+    return True
 
 
 def show_pre_generation_warnings(names: list[str]) -> None:
@@ -1050,12 +1085,24 @@ def setup_gui() -> None:
                 )
                 return
 
+            try:
+                sender_email = ensure_connected_gmail_account(
+                    client_secret_path=str(resource_path("client_secret.json")),
+                    token_path=str(BASE_DIR / "gmail_token.json"),
+                )
+            except GmailAuthError as e:
+                messagebox.showerror("Gmail setup required", str(e), parent=window)
+                return
+
             confirm = messagebox.askyesno(
                 "Confirm sending",
-                f"This will send emails to {sendable_count} matched recipient(s).\n\nDo you want to continue?",
+                build_send_confirmation_message(sendable_count, sender_email),
                 parent=window,
             )
             if not confirm:
+                return
+            
+            if not require_large_send_confirmation(sendable_count, window):
                 return
 
             try:

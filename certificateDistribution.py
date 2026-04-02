@@ -270,11 +270,40 @@ def load_email_draft(folder_path: str) -> dict | None:
 
     return json.loads(input_path.read_text(encoding="utf-8"))
 
-GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
+GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.compose"]
 
 
 class GmailAuthError(Exception):
     pass
+
+
+def get_connected_gmail_account(service) -> str | None:
+    try:
+        profile = service.users().getProfile(userId="me").execute()
+    except Exception:
+        return None
+
+    email = str(profile.get("emailAddress", "")).strip()
+    return email or None
+
+
+def ensure_connected_gmail_account(
+    client_secret_path: str = "client_secret.json",
+    token_path: str = "gmail_token.json",
+) -> str:
+    service = get_gmail_service(
+        client_secret_path=client_secret_path,
+        token_path=token_path,
+    )
+
+    connected_account = get_connected_gmail_account(service)
+    if connected_account:
+        return connected_account
+
+    raise GmailAuthError(
+        "Gmail login completed, but the connected account email could not be determined.\n\n"
+        "Please delete gmail_token.json and sign in again."
+    )
 
 
 def render_email_template(
