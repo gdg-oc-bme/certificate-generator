@@ -6,6 +6,7 @@ import unicodedata
 import pandas as pd
 
 import base64
+import html
 import json
 import mimetypes
 from email.message import EmailMessage
@@ -399,6 +400,103 @@ def get_gmail_service(
 
     return build("gmail", "v1", credentials=creds)
 
+MARKDOWN_LINK_PATTERN = re.compile(r'\[([^\]]+)\]\((https?://[^\s)]+)\)')
+URL_PATTERN = re.compile(r'https?://[^\s<>"\']+')
+
+
+def convert_urls_to_html_links(text: str) -> str:
+    result = []
+    last_index = 0
+
+    while last_index < len(text):
+        markdown_match = MARKDOWN_LINK_PATTERN.search(text, last_index)
+        url_match = URL_PATTERN.search(text, last_index)
+
+        next_match = None
+        match_type = None
+
+        if markdown_match and url_match:
+            if markdown_match.start() <= url_match.start():
+                next_match = markdown_match
+                match_type = "markdown"
+            else:
+                next_match = url_match
+                match_type = "url"
+        elif markdown_match:
+            next_match = markdown_match
+            match_type = "markdown"
+        elif url_match:
+            next_match = url_match
+            match_type = "url"
+        else:
+            result.append(html.escape(text[last_index:]))
+            break
+
+        start, end = next_match.span()
+        result.append(html.escape(text[last_index:start]))
+
+        if match_type == "markdown":
+            link_text, raw_url = next_match.groups()
+
+            trailing_punctuation = ""
+            while raw_url and raw_url[-1] in ".,);:!?":
+                trailing_punctuation = raw_url[-1] + trailing_punctuation
+                raw_url = raw_url[:-1]
+
+            escaped_url = html.escape(raw_url, quote=True)
+            escaped_link_text = html.escape(link_text)
+
+            result.append(
+                f'<a href="{escaped_url}" style="color:#1155cc; text-decoration:underline;">'
+                f"{escaped_link_text}</a>"
+            )
+
+            if trailing_punctuation:
+                result.append(html.escape(trailing_punctuation))
+
+        else:
+            raw_url = next_match.group(0)
+
+            trailing_punctuation = ""
+            while raw_url and raw_url[-1] in ".,);:!?":
+                trailing_punctuation = raw_url[-1] + trailing_punctuation
+                raw_url = raw_url[:-1]
+
+            escaped_url = html.escape(raw_url, quote=True)
+            result.append(
+                f'<a href="{escaped_url}" style="color:#1155cc; text-decoration:underline;">'
+                f"{escaped_url}</a>"
+            )
+
+            if trailing_punctuation:
+                result.append(html.escape(trailing_punctuation))
+
+        last_index = end
+
+    return "".join(result).replace("\n", "<br>\n")
+
+
+def convert_plain_text_to_html(body: str) -> str:
+    normalized_body = str(body).replace("\r\n", "\n").replace("\r", "\n").strip()
+
+    wrapper_start = (
+        '<html>'
+        '<body style="margin:0; padding:24px 0; background-color:#ffffff;">'
+        '<div style="font-family:Arial, Helvetica, sans-serif; '
+        'font-size:16px; line-height:1.6; color:#202124;">'
+    )
+    wrapper_end = "</div></body></html>"
+
+    if not normalized_body:
+        return wrapper_start + wrapper_end
+
+    paragraphs = []
+    for paragraph in normalized_body.split("\n\n"):
+        escaped_paragraph = convert_urls_to_html_links(paragraph)
+        paragraphs.append(f'<p style="margin:0 0 16px 0;">{escaped_paragraph}</p>')
+
+    return wrapper_start + "\n".join(paragraphs) + wrapper_end
+
 
 def send_email_with_attachment(
     service,
@@ -420,7 +518,10 @@ def send_email_with_attachment(
     message = EmailMessage()
     message["To"] = to_email
     message["Subject"] = subject
+
+    html_body = convert_plain_text_to_html(body)
     message.set_content(body)
+    message.add_alternative(html_body, subtype="html")
 
     with attachment_file.open("rb") as f:
         attachment_data = f.read()

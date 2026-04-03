@@ -455,8 +455,36 @@ def test_send_email_with_attachment_builds_and_sends_message(tmp_path):
     assert parsed["To"] == "user@example.com"
     assert parsed["Subject"] == "Your Certificate"
 
+    plain_part = parsed.get_body(preferencelist=("plain",))
+    html_part = parsed.get_body(preferencelist=("html",))
+
+    assert plain_part is not None
+    assert html_part is not None
+    assert plain_part.get_content().strip() == "Congratulations!"
+    assert '<div style="font-family:Arial, Helvetica, sans-serif;' in html_part.get_content()
+    assert '<p style="margin:0 0 16px 0;">Congratulations!</p>' in html_part.get_content()
+
     attachment_names = [part.get_filename() for part in parsed.iter_attachments()]
     assert "certificate.pdf" in attachment_names
+
+
+def test_convert_plain_text_to_html_makes_urls_clickable():
+    html_body = cd.convert_plain_text_to_html(
+        "Community page:\nhttps://example.com/test."
+    )
+
+    assert 'href="https://example.com/test"' in html_body
+    assert '>https://example.com/test</a>.' in html_body
+
+
+def test_convert_plain_text_to_html_supports_markdown_style_links():
+    html_body = cd.convert_plain_text_to_html(
+        "We uploaded the photos. Click [here](https://example.com/gallery)."
+    )
+
+    assert 'href="https://example.com/gallery"' in html_body
+    assert ">here</a>." in html_body
+    assert ">https://example.com/gallery</a>" not in html_body
 
 
 def test_export_email_send_report_creates_new_file(tmp_path):
