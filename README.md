@@ -14,6 +14,8 @@ The application currently supports:
 * configurable certificate output format: PDF, JPG, or Both (PDF by default)
 * email distribution with certificate attachments
 * editable email subject/body templates
+* HTML email formatting with plain-text fallback
+* clickable links in email templates using raw URLs or `[text](url)` syntax
 * preview of matched / missing / ambiguous recipients
 * resend protection using previous send reports
 * Gmail account confirmation before sending
@@ -43,7 +45,9 @@ The application currently supports:
 19. Skip already-sent recipients using resend protection.
 20. Show the connected Gmail account before final sending.
 21. Require typed confirmation for larger email batches.
-22. Generate email send reports after sending.
+22. Send emails as HTML with a plain-text fallback.
+23. Support clickable links in email templates using raw URLs or `[text](url)` syntax.
+24. Generate email send reports after sending.
 
 # Rules for contributing
 
@@ -183,9 +187,13 @@ This creates a temporary preview and opens it so you can check the layout before
    * `{full_name}`
    * `{event_title}`
    * `{event_date}`
-7. Confirm the Gmail account shown before sending.
-8. For larger batches, type `SEND` when prompted.
-9. Send emails only after reviewing the matched recipients.
+7. The email body is sent as **HTML with a plain-text fallback** for better formatting in email clients.
+8. You can include links in two ways:
+   * paste a raw URL such as `https://example.com`
+   * use Markdown-style link text such as `[here](https://example.com)`
+9. Confirm the Gmail account shown before sending.
+10. For larger batches, type `SEND` when prompted.
+11. Send emails only after reviewing the matched recipients.
 
 The app also saves:
 * `distribution_report.csv`
@@ -193,6 +201,32 @@ The app also saves:
 * `email_send_report.csv`
 
 When matching certificate files for email distribution, the app prefers the PDF version if both PDF and JPG exist for the same participant.
+
+## Email Formatting and Links
+
+Certificate emails are sent as **HTML emails with a plain-text fallback**.
+
+This improves:
+* paragraph spacing
+* readability on desktop and mobile email clients
+* presentation of links inside the email body
+
+The email template editor still uses normal plain text input in the GUI.
+
+Supported link formats:
+
+* Raw URL:
+  * `https://gdg.community.dev/gdg-on-campus-bme-budapest-hungary/`
+* Custom clickable text:
+  * `[here](https://gdg.community.dev/gdg-on-campus-bme-budapest-hungary/)`
+
+Example:
+
+```text
+We uploaded the event photos.
+Click [here](https://example.com/photos) to open the folder.
+```
+In the received email, `here` will appear as the clickable text.
 
 # CSV Requirements
 
@@ -370,6 +404,8 @@ arabic-reshaper==3.0.0
 This can be used to amend the `requirements.txt`.
 
 # Testing
+
+The project currently includes 100+ automated tests covering certificate generation, GUI flows, email distribution, and Google Drive upload behavior.
 
 The project includes automated tests for:
 

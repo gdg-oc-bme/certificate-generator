@@ -967,7 +967,10 @@ def setup_gui() -> None:
 
         help_label = tk.Label(
             window,
-            text="You can use: {full_name}, {event_title}, {event_date}",
+            text=(
+                "You can use: {full_name}, {event_title}, {event_date}\n"
+                "Tip: Use [here](https://example.com) to create clickable text links."
+            ),
             bg=BG_COLOR,
             fg="#6B7280",
             font=("Helvetica", 9),
