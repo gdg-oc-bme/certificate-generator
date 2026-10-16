@@ -1,5 +1,8 @@
 client_secret.json
 credentials.json
+token.json
+gmail_token.json
+*.pickle
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -9,8 +12,12 @@ __pycache__/
 *.so
 venv/
 *.jpg
+!template_certificate_no_line.jpg
+!template_certificate_line.jpg
 *.png
+!logo.png
 *.env
+.vscode/
 # Distribution / packaging
 .Python
 build/
