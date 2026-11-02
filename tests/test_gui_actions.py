@@ -1,4 +1,7 @@
 from pathlib import Path
+from unittest.mock import MagicMock, Mock
+
+import pytest
 import GUI
 
 
@@ -277,10 +280,11 @@ def test_open_file_calls_startfile(monkeypatch):
     assert called["path"] == "C:/temp/file.jpg"
 
 
-def test_generate_single_certificate_shows_error_if_name_missing(monkeypatch):
+@pytest.mark.parametrize("event_title,event_date", [("Workshop", "27/03/2026"), ("", "")])
+def test_generate_single_certificate_shows_error_if_name_missing(monkeypatch, event_title, event_date):
     participant = DummyEntry("")
-    event_title = DummyEntry("Workshop")
-    event_date = DummyEntry("27/03/2026")
+    event_title = DummyEntry(event_title)
+    event_date = DummyEntry(event_date)
     progress_var = DummyVar()
     progress_bar = DummyProgressbar()
     root = DummyRoot()
@@ -300,26 +304,61 @@ def test_generate_single_certificate_shows_error_if_name_missing(monkeypatch):
     assert called["title"] == "Missing participant name"
 
 
-def test_generate_single_certificate_shows_error_if_event_title_missing(monkeypatch):
-    participant = DummyEntry("John Doe")
-    event_title = DummyEntry("")
-    event_date = DummyEntry("27/03/2026")
-    progress_var = DummyVar()
-    progress_bar = DummyProgressbar()
-    root = DummyRoot()
+@pytest.mark.parametrize("action_name", ["generate_single_certificate", "preview_single_certificate"])
+@pytest.mark.parametrize("event_title", ["", "Workshop"])
+@pytest.mark.parametrize("event_date", ["", "27/03/2026", "29/02/2024"])
+def test_single_actions_accept_optional_event_fields(
+    monkeypatch, tmp_path, action_name, event_title, event_date
+):
+    monkeypatch.setattr(GUI, "select_output_directory", lambda title, date: str(tmp_path))
+    monkeypatch.setattr(GUI.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(GUI, "open_folder", lambda path: None)
+    monkeypatch.setattr(GUI, "open_file", lambda path: None)
+    edit = Mock()
+    preview = Mock(return_value=str(tmp_path / "preview.jpg"))
+    error = Mock()
+    monkeypatch.setattr(GUI.ce, "edit_certificate", edit)
+    monkeypatch.setattr(GUI.ce, "preview_certificate", preview)
+    monkeypatch.setattr(GUI.messagebox, "showerror", error)
+    monkeypatch.setattr(GUI.messagebox, "showinfo", Mock())
+    progress = DummyVar()
 
-    called = {}
-
-    def fake_showerror(title, msg):
-        called["title"] = title
-
-    monkeypatch.setattr(GUI.messagebox, "showerror", fake_showerror)
-
-    GUI.generate_single_certificate(
-        participant, event_title, event_date, progress_var, progress_bar, root
+    getattr(GUI, action_name)(
+        DummyEntry("John Doe"), DummyEntry(event_title), DummyEntry(event_date),
+        progress, DummyProgressbar(), DummyRoot(),
     )
 
-    assert called["title"] == "Missing event title"
+    renderer = edit if action_name == "generate_single_certificate" else preview
+    renderer.assert_called_once()
+    assert renderer.call_args.args[2:4] == (event_title, event_date)
+    assert progress.get() == ("Generation complete" if renderer is edit else "Preview ready")
+    error.assert_not_called()
+
+
+@pytest.mark.parametrize("action_name", ["generate_single_certificate", "preview_single_certificate"])
+@pytest.mark.parametrize("event_title", ["", "Workshop"])
+@pytest.mark.parametrize("event_date", ["2026-03-27", "31/02/2026", "not a date"])
+def test_single_actions_reject_invalid_nonempty_dates(
+    monkeypatch, action_name, event_title, event_date
+):
+    error, output_directory, edit, preview = Mock(), Mock(), Mock(), Mock()
+    monkeypatch.setattr(GUI.messagebox, "showerror", error)
+    monkeypatch.setattr(GUI, "select_output_directory", output_directory)
+    monkeypatch.setattr(GUI.ce, "edit_certificate", edit)
+    monkeypatch.setattr(GUI.ce, "preview_certificate", preview)
+
+    getattr(GUI, action_name)(
+        DummyEntry("John Doe"), DummyEntry(event_title), DummyEntry(event_date),
+        DummyVar(), DummyProgressbar(), DummyRoot(),
+    )
+
+    error.assert_called_once_with(
+        "Invalid date", "Please enter a valid date in the format DD/MM/YYYY"
+    )
+    output_directory.assert_not_called()
+    edit.assert_not_called()
+    preview.assert_not_called()
+
 
 
 def test_generate_single_certificate_shows_error_if_date_invalid(monkeypatch):
@@ -488,3 +527,46 @@ def test_generate_certificates_success(monkeypatch, tmp_path):
     assert called["attendees_list"] == ["John Doe", "Jane Smith"]
     assert progress_var.get() == "Generation complete"
     assert info_called["title"] == "Generation complete"
+
+@pytest.mark.parametrize("event_title", ["", "Workshop"])
+@pytest.mark.parametrize("event_date,accepted", [
+    ("", True), ("27/03/2026", True), ("29/02/2024", True),
+    ("2026-03-27", False), ("31/02/2026", False), ("not a date", False),
+])
+def test_batch_button_validates_optional_event_date(monkeypatch, event_title, event_date, accepted):
+    # Build the real button callbacks with mocked widgets, without opening a window.
+    widgets = MagicMock()
+    widgets.Entry.side_effect = [
+        Mock(get=lambda: event_title), Mock(get=lambda: event_date), Mock(),
+    ]
+
+    def string_var(value=""):
+        variable = DummyVar()
+        variable.set(value)
+        return variable
+
+    widgets.StringVar.side_effect = string_var
+    monkeypatch.setattr(GUI, "tk", widgets)
+    monkeypatch.setattr(GUI, "ttk", MagicMock())
+    monkeypatch.setattr(GUI, "CanvasProgressBar", MagicMock())
+    monkeypatch.setattr(GUI, "select_csv_file", lambda: "attendees.csv")
+    generate, error = Mock(), Mock()
+    monkeypatch.setattr(GUI, "generate_certificates", generate)
+    monkeypatch.setattr(GUI.messagebox, "showerror", error)
+
+    GUI.setup_gui()
+    commands = {call.kwargs["text"]: call.kwargs["command"] for call in widgets.Button.call_args_list}
+    commands["Select CSV File"]()
+    commands["Generate Certificates"]()
+
+    if accepted:
+        generate.assert_called_once()
+        assert generate.call_args.args[0] == "attendees.csv"
+        assert generate.call_args.args[1].get() == event_title
+        assert generate.call_args.args[2].get() == event_date
+        error.assert_not_called()
+    else:
+        generate.assert_not_called()
+        error.assert_called_once_with(
+            "Invalid date", "Please enter a valid date in the format DD/MM/YYYY"
+        )

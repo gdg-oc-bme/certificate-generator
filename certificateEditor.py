@@ -79,7 +79,12 @@ def _split_name_two_lines(full_name: str) -> Tuple[str, str]:
 
 
 def _pretty_date_ddmmyyyy(date_text: str) -> str:
-    dt = datetime.strptime(date_text.strip(), "%d/%m/%Y")
+    date_text = (date_text or "").strip()
+
+    if not date_text:
+        return ""
+
+    dt = datetime.strptime(date_text, "%d/%m/%Y")
     return f"{dt.strftime('%B')} {dt.day}, {dt.year}"
 
 def _safe_filename(name: str, index: int | None = None) -> str:

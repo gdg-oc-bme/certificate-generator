@@ -478,12 +478,11 @@ def generate_single_certificate(
         messagebox.showerror("Missing participant name", "Please enter the participant name")
         return
 
-    if not event_title:
-        messagebox.showerror("Missing event title", "Please enter the event title")
-        return
-
-    if not validate_date(event_date):
-        messagebox.showerror("Invalid date", "Please enter a valid date in the format DD/MM/YYYY")
+    if event_date and not validate_date(event_date):
+        messagebox.showerror(
+            "Invalid date",
+            "Please enter a valid date in the format DD/MM/YYYY"
+        )
         return
 
     save_dir = select_output_directory(event_title, event_date)
@@ -555,12 +554,11 @@ def preview_single_certificate(
         messagebox.showerror("Missing participant name", "Please enter the participant name")
         return
 
-    if not event_title:
-        messagebox.showerror("Missing event title", "Please enter the event title")
-        return
-
-    if not validate_date(event_date):
-        messagebox.showerror("Invalid date", "Please enter a valid date in the format DD/MM/YYYY")
+    if event_date and not validate_date(event_date):
+        messagebox.showerror(
+            "Invalid date",
+            "Please enter a valid date in the format DD/MM/YYYY"
+        )
         return
 
     try:
@@ -709,7 +707,7 @@ def setup_gui() -> None:
 
     event_title_label = tk.Label(
         root,
-        text="Event Title:",
+        text="Event Title (optional):",
         bg=BG_COLOR,
         fg=TEXT_COLOR,
         font=label_font,
@@ -727,7 +725,7 @@ def setup_gui() -> None:
 
     event_date_label = tk.Label(
         root,
-        text="Event Date (DD/MM/YYYY):",
+        text="Event Date (optional, DD/MM/YYYY):",
         bg=BG_COLOR,
         fg=TEXT_COLOR,
         font=label_font,
@@ -829,16 +827,12 @@ def setup_gui() -> None:
                 "Please select a CSV file before generating certificates",
             )
             return
-        if not validate_date(event_date_entry.get()):
+
+        event_date = event_date_entry.get().strip()
+        if event_date and not validate_date(event_date):
             messagebox.showerror(
                 "Invalid date",
                 "Please enter a valid date in the format DD/MM/YYYY",
-            )
-            return
-        if not event_title_entry.get().strip():
-            messagebox.showerror(
-                "Missing event title",
-                "Please enter the event title",
             )
             return
 
