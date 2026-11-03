@@ -5,6 +5,178 @@ import pytest
 import GUI
 
 
+def configure_batch(monkeypatch, folder, names):
+    from unittest.mock import Mock
+    monkeypatch.setattr(GUI, "_failed_generation_folders", set())
+    monkeypatch.setattr(GUI, "select_output_directory", lambda *a: str(folder))
+    monkeypatch.setattr(GUI, "show_pre_generation_warnings", Mock())
+    monkeypatch.setattr(GUI, "open_folder", Mock())
+    report = dict(total_rows=len(names), eligible_count=len(names), accepted_count=len(names),
+                  skipped_count=0, skipped_not_checked_in=0, skipped_missing_name=0,
+                  accepted_csv_rows=list(range(2, len(names) + 2)))
+    monkeypatch.setattr(GUI, "read_names_from_file", lambda *a, **k: (names, report))
+    error, info = Mock(), Mock()
+    monkeypatch.setattr(GUI.messagebox, "showerror", error)
+    monkeypatch.setattr(GUI.messagebox, "showinfo", info)
+    return error, info
+
+
+def run_batch_ui():
+    progress = DummyVar()
+    GUI.generate_certificates("synthetic.csv", DummyEntry(""), DummyEntry(""),
+                              DummyVar(), progress, DummyProgressbar(), DummyRoot())
+    return progress
+
+
+def test_layout_failure_has_generation_context_and_blocks_distribution(monkeypatch, tmp_path):
+    error, info = configure_batch(monkeypatch, tmp_path, ["Alex Johnson", "W" * 200, "Jane Smith"])
+    auth, send, save = Mock(), Mock(), Mock()
+    monkeypatch.setattr(GUI, "ensure_connected_gmail_account", auth)
+    monkeypatch.setattr(GUI, "send_matched_certificates", send)
+    monkeypatch.setattr(GUI.ce, "_save_certificate_outputs", save)
+    progress = run_batch_ui()
+    assert error.call_args.args[0] == "Certificate Generation Error"
+    message = error.call_args.args[1]
+    assert "participant 2" in message and "CSV row 3" in message
+    assert "generation did not begin" in message and "Correct or shorten" in message
+    assert progress.get() == "Generation failed"
+    info.assert_not_called()
+    save.assert_not_called()
+    auth.assert_not_called()
+    send.assert_not_called()
+    assert not GUI._allow_distribution(str(tmp_path))
+    assert not GUI._allow_distribution(str(tmp_path / "subfolder"))
+
+
+def test_successful_retry_releases_failed_folder_guard(monkeypatch, tmp_path):
+    _, info = configure_batch(monkeypatch, tmp_path, ["Alex Johnson"])
+    GUI._failed_generation_folders.add(GUI._generation_folder_key(str(tmp_path)))
+    monkeypatch.setattr(GUI.ce, "edit_certificate", lambda *a, **k: ["synthetic.jpg"])
+    assert run_batch_ui().get() == "Generation complete"
+    info.assert_called_once()
+    assert GUI._allow_distribution(str(tmp_path))
+
+
+@pytest.mark.parametrize("exception", [ValueError("renderer validation"), OSError("disk error")])
+def test_generation_errors_are_not_csv_errors(monkeypatch, tmp_path, exception):
+    error, info = configure_batch(monkeypatch, tmp_path, ["Alex Johnson"])
+    monkeypatch.setattr(GUI.ce, "edit_certificate", Mock(side_effect=exception))
+    run_batch_ui()
+    assert error.call_args.args[0] == "Generation Error"
+    assert str(exception) in error.call_args.args[1]
+    info.assert_not_called()
+    assert not GUI._allow_distribution(str(tmp_path))
+
+
+def test_failed_folder_cannot_be_uploaded(monkeypatch, tmp_path):
+    configure_batch(monkeypatch, tmp_path, ["Alex Johnson"])
+    GUI._failed_generation_folders.add(GUI._generation_folder_key(str(tmp_path)))
+    upload = Mock()
+    monkeypatch.setattr(GUI, "select_upload_path", lambda: str(tmp_path))
+    monkeypatch.setattr(GUI, "Upload", upload)
+    GUI.upload_to_drive()
+    upload.assert_not_called()
+
+
+@pytest.mark.parametrize("choose_root", [False, True])
+def test_recursive_upload_of_parent_cannot_include_a_failed_batch(monkeypatch, tmp_path, choose_root):
+    configure_batch(monkeypatch, tmp_path, ["Alex Johnson"])
+    failed = tmp_path / "failed-batch"
+    GUI._failed_generation_folders.add(GUI._generation_folder_key(str(failed)))
+    upload = Mock()
+    selected = tmp_path.anchor if choose_root else str(tmp_path)
+    monkeypatch.setattr(GUI, "select_upload_path", lambda: selected)
+    monkeypatch.setattr(GUI, "Upload", upload)
+    GUI.upload_to_drive()
+    upload.assert_not_called()
+
+
+def test_failed_folder_distribution_preview_stops_before_matching(monkeypatch, tmp_path):
+    configure_batch(monkeypatch, tmp_path, ["Alex Johnson"])
+    GUI._failed_generation_folders.add(GUI._generation_folder_key(str(tmp_path)))
+    widgets = MagicMock()
+
+    def variable(value=""):
+        var = DummyVar()
+        var.set(value)
+        return var
+
+    widgets.StringVar.side_effect = variable
+    monkeypatch.setattr(GUI, "tk", widgets)
+    monkeypatch.setattr(GUI, "ttk", MagicMock())
+    monkeypatch.setattr(GUI, "CanvasProgressBar", MagicMock())
+    monkeypatch.setattr(GUI, "select_csv_file", lambda: "synthetic.csv")
+    monkeypatch.setattr(GUI, "select_certificates_folder", lambda: str(tmp_path))
+    read, auth = Mock(), Mock()
+    monkeypatch.setattr(GUI, "read_recipients_from_file", read)
+    monkeypatch.setattr(GUI, "ensure_connected_gmail_account", auth)
+    GUI.setup_gui()
+    commands = {call.kwargs["text"]: call.kwargs["command"]
+                for call in widgets.Button.call_args_list}
+    commands["Select CSV File"]()
+    commands["Preview Email Distribution"]()
+    read.assert_not_called()
+    auth.assert_not_called()
+
+
+def test_csv_row_context_survives_eligibility_filtering(tmp_path):
+    import pandas as pd
+    csv = tmp_path / "synthetic.csv"
+    pd.DataFrame([
+        {"First Name": "Alex", "Last Name": "Johnson", "Checkin Date (UTC)": "2026-03-27"},
+        {"First Name": "Not", "Last Name": "Checked", "Checkin Date (UTC)": ""},
+        {"First Name": "Jane", "Last Name": "Smith", "Checkin Date (UTC)": "2026-03-27"},
+    ]).to_csv(csv, index=False)
+    names, report = GUI.read_names_from_file(str(csv))
+    assert names == ["Alex Johnson", "Jane Smith"]
+    assert report["accepted_csv_rows"] == [2, 4]
+
+
+def test_already_open_email_dialog_rechecks_failed_generation_guard(monkeypatch, tmp_path):
+    configure_batch(monkeypatch, tmp_path, ["Alex Johnson"])
+    widgets = MagicMock()
+    widgets.Entry.return_value.get.return_value = ""
+
+    def variable(value=""):
+        var = DummyVar()
+        var.set(value)
+        return var
+
+    widgets.StringVar.side_effect = variable
+    monkeypatch.setattr(GUI, "tk", widgets)
+    monkeypatch.setattr(GUI, "ttk", MagicMock())
+    monkeypatch.setattr(GUI, "scrolledtext", MagicMock())
+    monkeypatch.setattr(GUI, "CanvasProgressBar", MagicMock())
+    monkeypatch.setattr(GUI, "select_csv_file", lambda: "synthetic.csv")
+    monkeypatch.setattr(GUI, "select_certificates_folder", lambda: str(tmp_path))
+    recipient_report = dict(total_rows=1, eligible_count=1, recipients_count=1,
+                            skipped_not_checked_in=0, skipped_missing_name=0, skipped_missing_email=0)
+    match_report = dict(matched_count=1, missing_certificate_count=0,
+                       ambiguous_certificate_count=0, certificate_files_found=1)
+    matches = [dict(full_name="Alex Johnson", email="alex@example.com", status="matched",
+                    certificate_path=str(tmp_path / "Alex Johnson.jpg"))]
+    monkeypatch.setattr(GUI, "read_recipients_from_file", Mock(return_value=([], recipient_report)))
+    monkeypatch.setattr(GUI, "match_certificates_to_recipients", Mock(return_value=(matches, match_report)))
+    monkeypatch.setattr(GUI, "export_distribution_report", Mock(return_value="synthetic.csv"))
+    monkeypatch.setattr(GUI, "load_email_draft", Mock(return_value=None))
+    auth, send = Mock(), Mock()
+    monkeypatch.setattr(GUI, "ensure_connected_gmail_account", auth)
+    monkeypatch.setattr(GUI, "send_matched_certificates", send)
+    GUI.setup_gui()
+
+    def commands():
+        return {call.kwargs["text"]: call.kwargs["command"]
+                for call in widgets.Button.call_args_list}
+
+    commands()["Select CSV File"]()
+    commands()["Preview Email Distribution"]()
+    # The dialog was prepared while the folder was allowed; a later batch fails.
+    GUI._failed_generation_folders.add(GUI._generation_folder_key(str(tmp_path)))
+    commands()["Send Matched Emails"]()
+    auth.assert_not_called()
+    send.assert_not_called()
+
+
 def test_open_folder_does_not_crash_if_startfile_fails(monkeypatch):
     def fake_startfile(path):
         raise OSError("cannot open")

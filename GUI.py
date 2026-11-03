@@ -38,6 +38,36 @@ TEXT_COLOR = "#202124"
 WHITE = "#FFFFFF"
 LIGHT_BORDER = "#DADCE0"
 
+# Session-only guard: existing files do not certify a failed generation attempt.
+_failed_generation_folders: set[str] = set()
+
+
+def _generation_folder_key(folder):
+    return os.path.normcase(os.path.realpath(folder))
+
+
+def _allow_distribution(folder, parent=None, *, recursive=False):
+    key = _generation_folder_key(folder)
+
+    def within(child, ancestor):
+        try:
+            return os.path.commonpath((child, ancestor)) == ancestor
+        except ValueError:  # paths on different drives
+            return False
+
+    if any(within(key, failed) or (recursive and within(failed, key))
+           for failed in _failed_generation_folders):
+        messagebox.showerror(
+            "Generation incomplete",
+            "The latest generation attempt for this folder failed. Existing files "
+            "were preserved and may be stale. Correct the input and successfully "
+            "regenerate the batch before distributing from this folder.",
+            parent=parent,
+        )
+        return False
+    return True
+
+
 class CanvasProgressBar:
     def __init__(
         self,
@@ -293,6 +323,7 @@ def read_names_from_file(
         raise ValueError(f"Missing required CSV columns: {missing_columns}")
 
     accepted_names: list[str] = []
+    accepted_csv_rows: list[int] = []
     skipped_rows: list[dict] = []
 
     total_rows = len(df)
@@ -330,6 +361,7 @@ def read_names_from_file(
             continue
 
         accepted_names.append(full_name)
+        accepted_csv_rows.append(index + 2)
 
     accepted_count = len(accepted_names)
     skipped_count = len(skipped_rows)
@@ -344,6 +376,7 @@ def read_names_from_file(
         "total_rows": total_rows,
         "eligible_count": eligible_count,
         "accepted_count": accepted_count,
+        "accepted_csv_rows": accepted_csv_rows,
         "skipped_count": skipped_count,
         "skipped_not_checked_in": skipped_not_checked_in,
         "skipped_missing_name": skipped_missing_name,
@@ -376,6 +409,8 @@ def generate_certificates(
 
     attendees_list: list[str] = []
     report = None
+    phase = "csv"
+    _failed_generation_folders.add(_generation_folder_key(save_dir))
 
     try:
         progress_var.set("Reading CSV...")
@@ -397,6 +432,7 @@ def generate_certificates(
             )
             return
 
+        phase = "generation"
         show_pre_generation_warnings(attendees_list)
 
         progress_bar["maximum"] = len(attendees_list)
@@ -413,6 +449,9 @@ def generate_certificates(
         if "output_format" in inspect.signature(ce.edit_certificate).parameters:
             edit_kwargs["output_format"] = output_format
 
+        if "participant_rows" in inspect.signature(ce.edit_certificate).parameters:
+            edit_kwargs["participant_rows"] = report.get("accepted_csv_rows")
+
         ce.edit_certificate(
             "template_certificate_no_line.jpg",
             attendees_list,
@@ -423,6 +462,8 @@ def generate_certificates(
             save_dir,
             **edit_kwargs,
         )
+
+        _failed_generation_folders.discard(_generation_folder_key(save_dir))
 
         mode_label = "Checked-in only" if checked_in_only else "All registrants"
 
@@ -446,12 +487,19 @@ def generate_certificates(
         messagebox.showinfo("Generation complete", summary_message)
         open_folder(save_dir)
 
+    except ce.CertificateLayoutError as e:
+        progress_var.set("Generation failed")
+        messagebox.showerror("Certificate Generation Error", str(e))
     except ValueError as e:
-        progress_var.set("CSV error")
-        messagebox.showerror("CSV Error", str(e))
+        if phase == "csv":
+            progress_var.set("CSV error")
+            messagebox.showerror("CSV Error", str(e))
+        else:
+            progress_var.set("Generation failed")
+            messagebox.showerror("Generation Error", str(e))
     except Exception as e:
         progress_var.set("Generation failed")
-        messagebox.showerror("Generation failed", f"Something went wrong:\n{e}")
+        messagebox.showerror("Generation Error", str(e))
 
 
 def generate_single_certificate(
@@ -600,6 +648,8 @@ def preview_single_certificate(
 def upload_to_drive() -> None:
     folder_path = select_upload_path()
     if folder_path:
+        if not _allow_distribution(folder_path, recursive=True):
+            return
         parent_folder_name = os.path.basename(folder_path)
         try:
             folder_url = Upload(folder_path, parent_folder_name)
@@ -1046,6 +1096,8 @@ def setup_gui() -> None:
                 
 
         def send_emails_button() -> None:
+            if not _allow_distribution(certificates_folder, window):
+                return
             subject = subject_entry.get().strip()
             body = body_text.get("1.0", tk.END).strip()
 
@@ -1261,6 +1313,8 @@ def setup_gui() -> None:
 
         certificates_folder = select_certificates_folder()
         if not certificates_folder:
+            return
+        if not _allow_distribution(certificates_folder):
             return
 
         try:
