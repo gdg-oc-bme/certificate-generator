@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Tuple
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 import arabic_reshaper
 from bidi.algorithm import get_display
@@ -79,7 +79,12 @@ def _split_name_two_lines(full_name: str) -> Tuple[str, str]:
 
 
 def _pretty_date_ddmmyyyy(date_text: str) -> str:
-    dt = datetime.strptime(date_text.strip(), "%d/%m/%Y")
+    date_text = (date_text or "").strip()
+
+    if not date_text:
+        return ""
+
+    dt = datetime.strptime(date_text, "%d/%m/%Y")
     return f"{dt.strftime('%B')} {dt.day}, {dt.year}"
 
 def _safe_filename(name: str, index: int | None = None) -> str:
@@ -157,7 +162,18 @@ def _save_certificate_outputs(
 
     if ".pdf" in suffixes:
         pdf_path = base_output_path.with_suffix(".pdf")
-        template.convert("RGB").save(pdf_path, format="PDF", resolution=100.0)
+        # A4 landscape at 300 DPI, fitted without cropping or stretching.
+        pdf_image = ImageOps.pad(
+            template.convert("RGB"),
+            (3508, 2480),
+            method=Image.Resampling.LANCZOS,
+            color="white",
+            centering=(0.5, 0.5),
+        )
+        pdf_image.save(
+            pdf_path, format="PDF", resolution=300.0,
+            quality=90, optimize=True, subsampling=0,
+        )
         saved_paths.append(str(pdf_path))
 
     return saved_paths
