@@ -1,0 +1,10 @@
+project_id = "gdg-certificate-registry"
+
+[api]
+# Only execute-restricted RPCs; never expose registry_private or registry tables.
+schemas = ["registry_api"]
+extra_search_path = ["public", "extensions"]
+
+[functions.registry-v1]
+verify_jwt = true
+entrypoint = "./functions/registry-v1/index.ts"

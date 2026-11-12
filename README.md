@@ -22,6 +22,20 @@ The application currently supports:
 * extra typed confirmation for larger sends
 * automated tests and coverage
 
+## Centralized issuance infrastructure — Issue #15
+
+The Supabase registry provides centralized certificate reservations, atomic issuance,
+individual issuer authorization, idempotent retries, and recovery fencing. Its source
+and API contract are in [the infrastructure README](infrastructure/supabase/README.md).
+The current hosted project is a separate development environment with
+`REGISTRY_ENABLED=false`. Desktop integration belongs to Issue #16.
+
+Operational documentation includes the [deployment procedure](infrastructure/supabase/DEPLOYMENT.md),
+[administrator and recovery runbook](infrastructure/supabase/OPERATIONS.md),
+[readiness checklist](infrastructure/supabase/READINESS.md), and
+[isolated recovery rehearsal](infrastructure/supabase/rehearsal/README.md).
+The reported successful registry-only rehearsal retains `safe_to_reopen=false`.
+
 # Features
 
 1. Generate certificates for all eligible participants from a CSV file.

@@ -133,12 +133,18 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Generated Supabase CLI state (not infrastructure source)
+/infrastructure/supabase/.temp/
+/infrastructure/supabase/.branches/
 
 # Spyder project settings
 .spyderproject
